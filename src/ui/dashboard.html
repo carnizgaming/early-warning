@@ -428,7 +428,8 @@ function btns(){ sb.textContent = soundOn?'Sound on':'Sound off'; sb.className =
 sb.onclick = ()=>{ soundOn=!soundOn; try{localStorage.setItem('ew-sound',soundOn?'1':'0')}catch(e){} if(soundOn) beep(1); btns(); };
 nb.onclick = ()=>{ newsAll=!newsAll; try{localStorage.setItem('ew-newsall',newsAll?'1':'0')}catch(e){} btns(); if(data) render(); };
 btns();
-document.getElementById('refreshBtn').onclick = async (e)=>{ const b=e.target; b.textContent='Checking…'; b.disabled=true; try{ const d=await window.ew.refresh(); if(d){data=d;render();} } finally { b.textContent='Refresh'; b.disabled=false; } };
+document.addEventListener('keydown', e => { if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')) { e.preventDefault(); document.getElementById('refreshBtn').click(); } });
+document.getElementById('refreshBtn').onclick = async (e)=>{ const b=document.getElementById('refreshBtn'); b.textContent='Checking…'; b.disabled=true; try{ const d=await window.ew.refresh(); if(d){data=d;render();} } finally { b.textContent='Refresh'; b.disabled=false; } };
 document.getElementById('settingsBtn').onclick = ()=>window.ew.openSettings();
 load(); setInterval(load, 60000); setInterval(tick, 15000);
 </script>
