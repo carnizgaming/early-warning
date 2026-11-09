@@ -59,6 +59,7 @@ button:hover{color:var(--text)} button.on{color:var(--ok);border-color:#24603f}
 .track span{margin-right:48px;color:#c7cfd8}
 .track span b{color:var(--muted);font-weight:600;margin-right:6px}
 @keyframes scroll{to{transform:translateX(-100%)}}
+body.idle .track{animation-play-state:paused}
 .wait{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:18px;text-align:center;padding:30px}
 
 header{grid-template-columns:auto auto 1fr auto !important}
@@ -438,6 +439,9 @@ btns();
 document.addEventListener('keydown', e => { if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')) { e.preventDefault(); document.getElementById('refreshBtn').click(); } });
 document.getElementById('refreshBtn').onclick = async (e)=>{ const b=document.getElementById('refreshBtn'); b.textContent='Checking…'; b.disabled=true; try{ const d=await window.ew.refresh(); if(d){data=d;render();} } finally { b.textContent='Refresh'; b.disabled=false; } };
 document.getElementById('settingsBtn').onclick = ()=>window.ew.openSettings();
+// The ticker redraws 60 times a second, which keeps the GPU busy. Pause it while another window is active.
+const idle = () => document.body.classList.toggle('idle', !document.hasFocus() || document.hidden);
+addEventListener('focus', idle); addEventListener('blur', idle); document.addEventListener('visibilitychange', idle); idle();
 load(); setInterval(load, 60000); setInterval(tick, 15000);
 </script>
 </body>

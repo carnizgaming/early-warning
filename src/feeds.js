@@ -139,7 +139,7 @@ function buildUS(s, add) {
 // ---------------- the same everywhere ----------------
 function shared(s, add) {
   add({ id: 'gdelt', panel: 'tension', name: 'GDELT world conflict coverage', kind: 'gdelt', everyMinutes: 360, backoffMinutes: 360, url: 'https://api.gdeltproject.org/api/v2/doc/doc?query=(war%20OR%20missile%20OR%20airstrike%20OR%20invasion%20OR%20mobilization%20OR%20%22nuclear%20threat%22)%20sourcelang:english&mode=timelinevol&timespan=7d&format=json', link: 'https://www.gdeltproject.org/' });
-  add({ id: 'gdacs', panel: 'world', name: 'Global disasters (GDACS)', kind: 'gdacs', url: 'https://www.gdacs.org/xml/rss.xml', link: 'https://www.gdacs.org/' });
+  add({ id: 'gdacs', panel: 'world', name: 'Global disasters (GDACS)', kind: 'gdacs', everyMinutes: 30, url: 'https://www.gdacs.org/xml/rss.xml', link: 'https://www.gdacs.org/' });
   add({ id: 'usgs', panel: 'world', name: 'Earthquakes M4.5+ worldwide (USGS)', kind: 'usgs', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson', link: 'https://earthquake.usgs.gov/earthquakes/map/' });
   add({ id: 'nasa-eonet', panel: 'world', name: 'NASA natural events (EONET)', kind: 'eonet', everyMinutes: 30, url: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=10', link: 'https://eonet.gsfc.nasa.gov/' });
   add({ id: 'who', panel: 'health', name: 'WHO disease outbreak news', kind: 'who', everyMinutes: 60, url: 'https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDate%20desc&$top=12', link: 'https://www.who.int/emergencies/disease-outbreak-news' });

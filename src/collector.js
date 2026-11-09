@@ -536,7 +536,8 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   await Promise.all(feeds.filter(f => f.enabled !== false).map(async f => {
     if (f.kind === 'link') { sources.push({ id: f.id, name: f.name, panel: f.panel, link: f.link, ok: null, count: 0, error: f.note || 'Open the link to check (no free feed)' }); return; }
     const h = H[f.kind]; if (!h) return;
-    const cacheFile = path.join(dataDir, `cache-${f.id}.json`), failFile = path.join(dataDir, `fail-${f.id}.txt`);
+    // US caches are kept apart: some handlers (GDACS, WHO) mark items local by nation, so a country switch mustn't reuse them
+    const cacheFile = path.join(dataDir, `cache-${f.id}${US ? '-us' : ''}.json`), failFile = path.join(dataDir, `fail-${f.id}.txt`);
     const mtimeMin = p => { try { return (Date.now() - fs.statSync(p).mtimeMs) / 60000; } catch { return Infinity; } };
     let got = null;
     try {
