@@ -275,7 +275,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     if (!d.length) throw new Error('No frequency data');
     const vals = d.map(x => +x.frequency), min = Math.min(...vals), max = Math.max(...vals), last = vals[vals.length - 1];
     const lvl = (min < 49.5 || max > 50.5) ? 'warning' : (min < 49.8 || max > 50.2) ? 'watch' : 'info';
-    const it = newItem(f, `Grid frequency ${last.toFixed(2)} Hz (last hour ${min.toFixed(2)} to ${max.toFixed(2)})`, f.link, toIso(d[d.length - 1].measurementTime), 'The whole GB grid runs at 50 Hz. Dips below 49.8 Hz mean power stations have tripped; below 49.5 Hz automatic blackouts start.', lvl, false, 'freq');
+    const it = newItem(f, `Grid frequency ${last.toFixed(2)} Hz (last hour ${min.toFixed(2)} to ${max.toFixed(2)})`, f.link, toIso(d[d.length - 1].measurementTime), 'The whole GB grid runs at 50 Hz. Dips below 49.8 Hz mean power stations have tripped; 49.5 Hz is the legal lower limit; at 48.8 Hz automatic blackouts start, cutting off areas to save the rest of the grid.', lvl, false, 'freq');
     const step = Math.max(1, Math.floor(d.length / 120)); const pts = []; for (let k = 0; k < d.length; k += step) pts.push([toIso(d[k].measurementTime), Math.round(+d[k].frequency * 1000) / 1000]);
     it.chart = Object.assign(chart('Grid frequency, last hour', 'Hz', pts, [{ v: 49.8, label: 'low limit' }, { v: 50.2, label: 'high limit' }]), { min: 49.6, max: 50.4 }); return [it];
   };
