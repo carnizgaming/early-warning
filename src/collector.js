@@ -347,12 +347,12 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   H.who = async f => arr((await getJson(f.url)).value).slice(0, 12).map(o => {
     const tm = toIso(o.PublicationDate); if (ageHours(tm) > 24 * 45) return null;
     const t = String(o.Title), sum = stripHtml(o.Summary);
-    let lvl = /novel|unknown|undetermined|avian influenza|H5N1|H7N9|pandemic|ebola|marburg|MERS|SARS|nipah|plague/i.test(`${t} ${sum}`) ? 'watch' : 'info';
+    let lvl = /novel|unknown|undetermined|avian influenza|H5N1|H7N9|pandemic|ebola|marburg|MERS|SARS|nipah|plague/i.test(`${t} ${sum}`) && ageHours(tm) <= 24 * 10 ? 'watch' : 'info';   // amber for 10 days, then drops back
     if (/United Kingdom|\bUK\b|England|Wales|Scotland/i.test(t)) lvl = 'warning';
     return newItem(f, t, 'https://www.who.int/emergencies/disease-outbreak-news/item/' + o.UrlName, tm, sum, lvl, /United Kingdom/i.test(t), 'outbreak');
   }).filter(Boolean);
   H.ukhsa = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14).slice(0, 10).map(e =>
-    newItem(f, e.title, e.link, e.time, e.summary, /outbreak|rise in cases|increase in cases|alert|pandemic|avian|measles|warning/i.test(`${e.title} ${e.summary}`) ? 'watch' : 'info', false, 'ukhsa'));
+    newItem(f, e.title, e.link, e.time, e.summary, /outbreak|rise in cases|increase in cases|alert|pandemic|avian|measles|warning/i.test(`${e.title} ${e.summary}`) && ageHours(e.time) <= 24 * 8 ? 'watch' : 'info', false, 'ukhsa'));
   H.fsa = async f => arr((await getJson(f.url)).items).slice(0, 15).map(a => {
     const tm = toIso(a.created); if (ageHours(tm) > 24 * 21) return null;
     const types = arr(a.type).join(' '); const kind = /FAFA/.test(types) ? 'Food alert for action' : /\/AA\b/.test(types) ? 'Allergy alert' : 'Recall';
