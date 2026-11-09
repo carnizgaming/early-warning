@@ -73,6 +73,7 @@ function buildFeeds(s) {
   add({ id: 'nasa-donki', panel: 'space', name: 'NASA space weather (DONKI)', kind: 'donki', everyMinutes: 30, backoffMinutes: 30, url: `https://api.nasa.gov/DONKI/notifications?type=all&api_key=${s.nasaKey || 'DEMO_KEY'}`, link: 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/' });
   // ---- cyber
   add({ id: 'ncsc', panel: 'cyber', name: 'NCSC (UK cyber security)', kind: 'ncsc', url: 'https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml', link: 'https://www.ncsc.gov.uk/' });
+  add({ id: 'kev', panel: 'cyber', name: 'CISA exploited flaws (weekly trend)', kind: 'kev', everyMinutes: 360, backoffMinutes: 120, url: 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', link: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog' });
   add({ id: 'cloudflare', panel: 'cyber', name: 'Cloudflare status (internet backbone)', kind: 'status', url: 'https://www.cloudflarestatus.com/history.rss', link: 'https://www.cloudflarestatus.com/' });
   add({ id: 'ioda', panel: 'cyber', name: 'UK internet outages (IODA)', kind: 'ioda', everyMinutes: 15, url: 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/alerts?entityType=country&entityCode=GB&from={unixMinus1d}&until={unixNow}', link: 'https://ioda.inetintel.cc.gatech.edu/country/GB' });
 

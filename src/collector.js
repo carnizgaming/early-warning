@@ -317,6 +317,33 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     const crit = al.filter(a => /critical/i.test(a.level)).length; const src = [...new Set(al.map(a => a.datasource))].join(', ');
     return [newItem(f, al.length ? `UK internet: ${al.length} outage signals in 24 h (${src})` : 'UK internet: no national outage signals in 24 h', f.link, iso(now), 'IODA watches routing, probing and traffic for country-wide internet disruption.', crit >= 3 ? 'warning' : crit >= 1 ? 'watch' : 'info', false, 'ioda')];
   };
+  // CISA Known Exploited Vulnerabilities: flaws confirmed as being attacked in the wild. Counted per week to show the trend.
+  H.kev = async f => {
+    const v = arr((await getJson(f.url)).vulnerabilities).filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.dateAdded || ''));
+    if (v.length < 100) throw new Error('KEV list looks incomplete');
+    const DAY = 864e5, d = new Date(now); d.setUTCHours(0, 0, 0, 0);
+    const thisMon = d.getTime() - ((d.getUTCDay() + 6) % 7) * DAY;     // Monday 00:00 UTC of this week
+    const weekOf = s => { const t = Date.parse(s + 'T00:00:00Z'); return t - ((new Date(t).getUTCDay() + 6) % 7) * DAY; };
+    const counts = {}; for (const x of v) { const w = weekOf(x.dateAdded); counts[w] = (counts[w] || 0) + 1; }
+    const wk = n => counts[thisMon - n * 7 * DAY] || 0;               // n = 1 is last full week
+    const sofar = counts[thisMon] || 0;
+    const prior = []; for (let n = 5; n <= 56; n++) prior.push(wk(n)); prior.sort((a, b) => a - b);
+    const normal = (prior[25] + prior[26]) / 2;                        // median of the year before the last month
+    const recent = (wk(1) + wk(2) + wk(3) + wk(4)) / 4;
+    const ratio = normal ? recent / normal : 1;
+    const lvl = ratio >= 2 ? 'warning' : ratio >= 1.5 ? 'watch' : 'info';
+    const trend = ratio >= 1.5 ? `${ratio.toFixed(1)}x normal` : ratio >= 1.2 ? 'above normal' : ratio <= 0.7 ? 'below normal' : 'normal';
+    const it = newItem(f, `Actively exploited flaws: ${recent.toFixed(1)}/week over the last month (${trend}; usual ${normal}/week)`, f.link, iso(now),
+      `${sofar} added so far this week, ${wk(1)} last week. CISA adds a flaw only once it is confirmed being attacked in the wild. A sustained rise means attackers are finding and using holes faster.`, lvl, false, 'kev');
+    const pts = []; for (let n = 26; n >= 1; n--) pts.push([iso(new Date(thisMon - n * 7 * DAY)), wk(n)]);
+    it.chart = chart('Exploited flaws added per week (CISA)', '/wk', pts, [{ v: normal, label: 'usual' }]);
+    const out = [it];
+    for (const x of v.filter(x => Date.now() - Date.parse(x.dateAdded) <= 7 * DAY).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 5)) {
+      const ransom = /known/i.test(x.knownRansomwareCampaignUse || '');
+      out.push(newItem(f, `${x.cveID}: ${x.vulnerabilityName}${ransom ? ' (used by ransomware)' : ''}`, 'https://nvd.nist.gov/vuln/detail/' + x.cveID, x.dateAdded + 'T12:00:00Z', x.shortDescription || '', ransom ? 'watch' : 'info', false, 'kev'));
+    }
+    return out;
+  };
   H.who = async f => arr((await getJson(f.url)).value).slice(0, 12).map(o => {
     const tm = toIso(o.PublicationDate); if (ageHours(tm) > 24 * 45) return null;
     const t = String(o.Title), sum = stripHtml(o.Summary);
