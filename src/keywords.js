@@ -91,7 +91,7 @@ module.exports = {
   "no water",
   "gas leak"
  ],
- "notWords": [
+ "notWords": [ "years ago", "revisiting", "nostalgia", "on this day", "memory lane", "from the archive", "looking back", "remember when",
   "trade war",
   "price war",
   "culture war",

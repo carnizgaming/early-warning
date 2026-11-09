@@ -351,7 +351,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     if (/United Kingdom|\bUK\b|England|Wales|Scotland/i.test(t)) lvl = 'warning';
     return newItem(f, t, 'https://www.who.int/emergencies/disease-outbreak-news/item/' + o.UrlName, tm, sum, lvl, /United Kingdom/i.test(t), 'outbreak');
   }).filter(Boolean);
-  H.ukhsa = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14).slice(0, 10).map(e =>
+  H.ukhsa = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14 && (!f.match || String(e.title).toLowerCase().includes(f.match))).slice(0, 10).map(e =>
     newItem(f, e.title, e.link, e.time, e.summary, /outbreak|rise in cases|increase in cases|alert|pandemic|avian|measles|warning/i.test(`${e.title} ${e.summary}`) && ageHours(e.time) <= 24 * 8 ? 'watch' : 'info', false, 'ukhsa'));
   H.fsa = async f => arr((await getJson(f.url)).items).slice(0, 15).map(a => {
     const tm = toIso(a.created); if (ageHours(tm) > 24 * 21) return null;
