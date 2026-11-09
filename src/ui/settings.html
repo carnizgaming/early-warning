@@ -43,12 +43,12 @@ a{color:var(--accent)}
 <body>
 <main>
   <h1 id="h">Set up Early Warning</h1>
-  <p class="lead" id="lead">Enter your postcode and the dashboard picks the right weather region, flood and tide gauges, power network and local news for where you live. Nothing is sent anywhere except the public feeds themselves.</p>
+  <p class="lead" id="lead">Enter your UK postcode or US ZIP code and the dashboard picks the right weather warnings, flood and tide gauges, power data and local news for where you live. Nothing is sent anywhere except the public feeds themselves.</p>
 
   <div class="card">
-    <label for="pc">Your postcode</label>
-    <div class="row"><input type="text" id="pc" placeholder="e.g. SW1A 1AA or just SW1A" autocomplete="postal-code"><button id="find" style="flex:0 0 auto">Look up</button></div>
-    <div class="hint">A full postcode is most accurate. Just the first half (the district) works too and reveals less.</div>
+    <label for="pc">Your postcode (UK) or ZIP code (US)</label>
+    <div class="row"><input type="text" id="pc" placeholder="e.g. SW1A 1AA, or a US ZIP code like 77550" autocomplete="postal-code"><button id="find" style="flex:0 0 auto">Look up</button></div>
+    <div class="hint">UK: a full postcode is most accurate; just the first half (the district) works too and reveals less. US: a 5-digit ZIP code.</div>
     <div class="err" id="err"></div>
     <div class="found" id="found">
       <dl class="facts" id="facts"></dl>
@@ -60,13 +60,13 @@ a{color:var(--accent)}
     <div class="card">
       <label for="name">Place name shown on the dashboard</label>
       <input type="text" id="name">
-      <label for="met">Met Office warning region</label>
-      <select id="met"></select>
+      <div id="ukMet"><label for="met">Met Office warning region</label>
+      <select id="met"></select></div>
       <label for="local">Words that mean "near you"</label>
       <input type="text" id="local">
       <div class="hint">Comma-separated. Headlines and alerts containing these are tagged NEAR YOU. Add nearby towns, rivers, landmarks.</div>
-      <label for="near">Nearby postcode districts (for power cuts)</label>
-      <input type="text" id="near">
+      <div id="ukNear"><label for="near">Nearby postcode districts (for power cuts)</label>
+      <input type="text" id="near"></div>
       <label for="news">Local news search terms</label>
       <input type="text" id="news">
       <div class="hint">Comma-separated places for the local news panel.</div>
@@ -95,13 +95,15 @@ a{color:var(--accent)}
   </div>
 
   <div class="actions">
-    <span class="small">Data comes from free public sources: GOV.UK, Met Office, Environment Agency, Open-Meteo, Elexon, NASA, WHO and others. <a href="#" id="log">Open the log</a></span>
+    <span class="small" id="srcs">Data comes from free public sources: GOV.UK, Met Office, Environment Agency, Open-Meteo, Elexon, NASA, WHO and others. <a href="#" id="log">Open the log</a></span>
     <button class="primary" id="save" disabled>Save and start</button>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const PANEL = { official:'Official alerts', weather:'Weather & air', floods:'Floods & tides', power:'Power cuts', energy:'Grid & gas', local:'Local & roads', news:'Flashpoints (news)', tension:'World tension', world:'Disasters & quakes', health:'Health & food', money:'Money & shipping', space:'Space weather & asteroids', cyber:'Cyber & internet' };
+const PANEL_UK = { official:'Official alerts', weather:'Weather & air', floods:'Floods & tides', power:'Power cuts', energy:'Grid & gas', local:'Local & roads', news:'Flashpoints (news)', tension:'World tension', world:'Disasters & quakes', health:'Health & food', money:'Money & shipping', space:'Space weather & asteroids', cyber:'Cyber & internet' };
+const PANEL_US = { ...PANEL_UK, floods:'Floods, fire & coast', power:'Power outages', energy:'Grid & fuel' };
+const isUS = () => !!home && home.nation === 'US';
 const DNO = { NGED:'National Grid (live power-cut data included)', SPEN:'SP Energy Networks (no live data: link only)', other:'Not National Grid (no live data: link only)' };
 let home = null, disabled = new Set(), current = null;
 const list = v => String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
@@ -123,24 +125,38 @@ async function init(){
 }
 function fill(){
   $('found').classList.add('on'); $('more').style.display = ''; $('save').disabled = false;
-  $('facts').innerHTML = [
+  const US = isUS(), mi = km => Math.round(km * 0.621) + ' mi';
+  $('facts').innerHTML = (US ? [
+    ['Place', home.name], ['State', home.state || home.region], ['County', home.district||'-'],
+    ['Map position', home.lat + ', ' + home.lon], ['Weather office', home.nwsOffice ? 'National Weather Service ' + home.nwsOffice + (home.timeZone ? ' · ' + home.timeZone : '') : '-'],
+    ['River gauge', home.riverGauge ? `${home.riverGauge.label} (${mi(home.riverGauge.km)})` : 'None with flood stages within 25 miles'],
+    ['Tide gauge', home.tideStation ? `${home.tideStation.label} (${mi(home.tideStation.km)})` : 'None within 25 miles (inland)'],
+    ['Power outages', 'No free live data in the US: news search plus a link to the outage map']
+  ] : [
     ['Place', home.name], ['Nation', home.country + (home.region ? ' · ' + home.region : '')], ['Council', home.district||'-'],
     ['Map position', home.lat + ', ' + home.lon], ['Power network', DNO[home.dno] || home.dno],
     ['Tide gauge', home.tideStation ? `${home.tideStation.label} (${home.tideStation.km} km)` : 'None within 40 km (inland, or outside England/Wales)']
-  ].map(([a,b])=>`<dt>${a}</dt><dd>${String(b).replace(/</g,'&lt;')}</dd>`).join('');
+  ]).map(([a,b])=>`<dt>${a}</dt><dd>${String(b).replace(/</g,'&lt;')}</dd>`).join('');
   $('name').value = home.name || ''; $('met').value = home.metRegion || 'se';
   $('local').value = (home.localWords||[]).join(', '); $('near').value = (home.nearPostcodes||[]).join(', ');
   $('news').value = (home.localNews||[]).join(', '); $('roads').value = (home.roads||[]).join(', ');
   $('paper').value = home.paperRss || ''; $('papername').value = home.paperName || '';
+  $('ukMet').style.display = US ? 'none' : ''; $('ukNear').style.display = US ? 'none' : '';
+  $('roads').placeholder = US ? 'e.g. I-45, US-59, Galveston Causeway' : 'e.g. M6, A38, Thelwall Viaduct';
+  $('srcs').firstChild.textContent = US
+    ? 'Data comes from free public sources: National Weather Service, NOAA, FEMA, USGS, NIFC, CDC, FDA, CISA, NASA, WHO and others. '
+    : 'Data comes from free public sources: GOV.UK, Met Office, Environment Agency, Open-Meteo, Elexon, NASA, WHO and others. ';
 }
 function collectHome(){
-  return { ...home, name: $('name').value.trim() || home.name, metRegion: $('met').value,
-    localWords: list($('local').value).map(x=>x.toLowerCase()), nearPostcodes: list($('near').value).map(x=>x.toUpperCase()),
+  const uk = isUS() ? {} : { metRegion: $('met').value, nearPostcodes: list($('near').value).map(x=>x.toUpperCase()) };
+  return { ...home, name: $('name').value.trim() || home.name, ...uk,
+    localWords: list($('local').value).map(x=>x.toLowerCase()),
     localNews: list($('news').value), roads: list($('roads').value), paperRss: $('paper').value.trim(), paperName: $('papername').value.trim() };
 }
 async function renderFeeds(){
   const feeds = await window.ew.feedsFor({ home: collectHome() });
   const groups = {}; for (const f of feeds) (groups[f.panel] = groups[f.panel] || []).push(f);
+  const PANEL = isUS() ? PANEL_US : PANEL_UK;
   $('feeds').innerHTML = Object.keys(PANEL).filter(p=>groups[p]).map(p => `<div class="grp"><b>${PANEL[p]}</b>` + groups[p].map(f =>
     `<label class="chk"><input type="checkbox" data-id="${f.id}" ${disabled.has(f.id)?'':'checked'}> ${f.name.replace(/</g,'&lt;')}</label>`).join('') + '</div>').join('');
   $('feeds').querySelectorAll('input').forEach(i => i.onchange = () => { if (i.checked) disabled.delete(i.dataset.id); else disabled.add(i.dataset.id); });
@@ -149,7 +165,7 @@ $('find').onclick = async () => {
   const b = $('find'); b.disabled = true; b.textContent = 'Looking up…'; $('err').style.display = 'none';
   const r = await window.ew.locate($('pc').value);
   b.disabled = false; b.textContent = 'Look up';
-  if (!r.ok) { $('err').textContent = 'Couldn\'t find that postcode (' + r.error + '). Check it and that you\'re online.'; $('err').style.display = 'block'; return; }
+  if (!r.ok) { $('err').textContent = 'Couldn\'t find that postcode or ZIP code (' + r.error + '). Check it and that you\'re online.'; $('err').style.display = 'block'; return; }
   const keep = home ? { roads: home.roads, paperRss: home.paperRss, paperName: home.paperName } : {};
   home = { ...r.home, ...(home && home.postcode === r.home.postcode ? keep : {}) };
   fill(); await renderFeeds();

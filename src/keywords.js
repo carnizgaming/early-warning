@@ -116,3 +116,13 @@ module.exports = {
   "no, just"
  ]
 };
+
+// United States: same idea, with US places, agencies and road words instead of UK ones.
+const GB = module.exports;
+const swap = (list, out, add) => list.filter(k => !out.includes(k)).concat(add);
+module.exports.US = {
+ critical: swap(GB.critical, ['attack on britain', 'attack on the uk', 'missile strike on uk'], ['attack on america', 'attack on the united states', 'attack on the u.s.', 'attack on us soil', 'missile strike on us', 'defcon 1', 'defcon 2']),
+ warning: swap(GB.warning, ['cobra'], ['national guard deployed', 'shelter in place', 'active shooter', 'grid emergency', 'rolling blackouts', 'energy emergency alert']),
+ watch: swap(GB.watch, ['ministry of defence', 'motorway closed', 'carriageway closed', 'power cut'], ['pentagon', 'power outage', 'interstate closed', 'freeway closed', 'highway closed', 'boil water advisory', 'hurricane', 'tornado', 'wildfire', 'evacuation order']),
+ notWords: swap(GB.notWords, ['la liga', 'premier league'], ['nfl', 'nba', 'mlb', 'super bowl', 'world series', 'playoff'])
+};

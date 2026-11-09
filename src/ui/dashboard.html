@@ -145,20 +145,25 @@ header{grid-template-columns:auto auto 1fr auto !important}
   <div class="ticker"><div class="lbl">LATEST</div><div style="overflow:hidden;flex:1"><div class="track" id="track"></div></div></div>
 </div>
 <script>
-const PANELS = [
-  {id:'official', title:'Official alerts', okText:'No emergency alerts. Threat level unchanged.'},
-  {id:'weather',  title:'Weather & air', okText:'No Met Office warnings for Wales.', charts:['wind','aqi']},
-  {id:'floods',   title:'Floods & tides', okText:'No flood warnings within 40 km.', charts:['tide']},
-  {id:'power',    title:'Power cuts', okText:'No power cuts listed near you.'},
-  {id:'energy',   title:'Grid & gas', okText:'Grid normal.', charts:['freq']},
-  {id:'local',    title:'Local & roads', okText:'Nothing local flagged.'},
-  {id:'news',     title:'Flashpoints (news)', okText:'Nothing flagged in the last 48 hours.'},
-  {id:'world',    title:'Disasters & quakes', okText:'No significant global disasters.'},
-  {id:'health',   title:'Health & food', okText:'No outbreaks or food alerts flagged.'},
-  {id:'money',    title:'Money & shipping', okText:'Nothing flagged.', charts:['fx']},
-  {id:'space',    title:'Space weather & asteroids', okText:'Quiet.'},
-  {id:'cyber',    title:'Cyber & internet', okText:'No current incidents.', charts:['kev']}
-];
+// Panels follow the location: UK postcode (nation GB) or US ZIP code (nation US)
+function panelsFor(d){
+  const US = d.nation==='US', place = d.home || 'your area';
+  return [
+    {id:'official', title:'Official alerts', okText: US ? 'No emergency alerts for your area.' : 'No emergency alerts. Threat level unchanged.'},
+    {id:'weather',  title:'Weather & air', okText: US ? 'No National Weather Service warnings for '+place+'.' : 'No Met Office warnings for your region.', charts:['wind','aqi']},
+    {id:'floods',   title: US ? 'Floods, fire & coast' : 'Floods & tides', okText: US ? 'No flood warnings, nearby wildfires or tsunami messages.' : 'No flood warnings within 40 km.', charts:['tide','river']},
+    {id:'power',    title: US ? 'Power outages' : 'Power cuts', okText: US ? 'No outage news for your area in the last 48 hours.' : 'No power cuts listed near you.'},
+    {id:'energy',   title: US ? 'Grid & fuel' : 'Grid & gas', okText: US ? 'No US grid emergencies or fuel shortages in the news.' : 'Grid normal.', charts:['freq']},
+    {id:'local',    title:'Local & roads', okText:'Nothing local flagged.'},
+    {id:'news',     title:'Flashpoints (news)', okText:'Nothing flagged in the last 48 hours.'},
+    {id:'world',    title:'Disasters & quakes', okText:'No significant global disasters.'},
+    {id:'health',   title:'Health & food', okText:'No outbreaks or food alerts flagged.'},
+    {id:'money',    title:'Money & shipping', okText:'Nothing flagged.', charts:['fx']},
+    {id:'space',    title:'Space weather & asteroids', okText:'Quiet.'},
+    {id:'cyber',    title:'Cyber & internet', okText:'No current incidents.', charts:['kev']}
+  ];
+}
+let LOC = 'en-GB';   // date and time format: en-US for US locations
 const RANK = {info:0, watch:1, warning:2, critical:3};
 const LABEL = {info:'ALL CLEAR', watch:'WATCH', warning:'WARNING', critical:'CRITICAL'};
 let data = null, lastOverall = null, seenCritical = new Set(), soundOn = false, newsAll = false, lastTicker = '';
@@ -215,7 +220,7 @@ function powerChart(pw, exp){
   [0, ymax/2, ymax].forEach(v=>{ grid += '<line x1="'+padL+'" x2="'+W+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35" stroke-width="1"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+Math.round(v)+'</text>'; });
   // day labels at local midnight
   const d0 = new Date(t0); d0.setHours(24,0,0,0);
-  for(let d=d0.getTime(); d<t1; d+=864e5){ const xx=x(d); grid += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString('en-GB',{weekday:'short'})+'</text>'; }
+  for(let d=d0.getTime(); d<t1; d+=864e5){ const xx=x(d); grid += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString(LOC,{weekday:'short'})+'</text>'; }
   const pts = S.map(p=>[x(p.t), y(p.total)]);
   const line = pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
   const area = line + ' L'+pts[pts.length-1][0].toFixed(1)+' '+y(0)+' L'+pts[0][0].toFixed(1)+' '+y(0)+' Z';
@@ -231,7 +236,7 @@ function powerChart(pw, exp){
     + '<path d="'+line+'" fill="none" stroke="#4a96d6" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
     + '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="#4a96d6" stroke="#12171d" stroke-width="2" vector-effect="non-scaling-stroke"/>'
     + '<line class="xh" x1="0" x2="0" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#8b97a5" stroke-width="1" vector-effect="non-scaling-stroke" style="display:none"/></svg>'
-    + '<div class="plegend"><span><i></i>cuts across South Wales &amp; West, last 7 days</span>'+(pw.baseline?'<span><i class="base"></i>normal</span>':'')+'</div>'
+    + '<div class="plegend"><span><i></i>cuts across the National Grid network (Midlands, South West, South Wales), last 7 days</span>'+(pw.baseline?'<span><i class="base"></i>normal</span>':'')+'</div>'
     + '<div class="tip"></div></div>';
 }
 function wirePowerChart(){
@@ -245,7 +250,7 @@ function wirePowerChart(){
     const bx = padL + (new Date(best.t)-t0)/(t1-t0)*(W-padL-2);
     xh.setAttribute('x1',bx); xh.setAttribute('x2',bx); xh.style.display='';
     const dt = new Date(best.t);
-    tip.innerHTML = dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'<br><b>'+best.total+'</b> <span>on network</span> &middot; <b>'+best.local+'</b> <span>near you</span>';
+    tip.innerHTML = dt.toLocaleDateString(LOC,{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'})+'<br><b>'+best.total+'</b> <span>on network</span> &middot; <b>'+best.local+'</b> <span>near you</span>';
     tip.style.display='block';
     const px = bx/W*r.width + (svg.getBoundingClientRect().left - c.getBoundingClientRect().left);
     tip.style.left = Math.min(Math.max(4, px - tip.offsetWidth/2), c.clientWidth - tip.offsetWidth - 4)+'px';
@@ -269,7 +274,7 @@ function mchart(id, c, exp){
   const [W, H] = chartSize(exp); const padL = 32, padR = 4, padB = 14, padT = 8;
   const vals = P.map(p=>p[1]).concat((c.refs||[]).map(r=>Number(r.v)));
   let lo = c.min!=null ? c.min : Math.min(...vals), hi = c.max!=null ? c.max : Math.max(...vals);
-  if(c.min==null && c.unit!=='Hz' && c.unit!=='$') lo = Math.min(0, lo);
+  if(c.min==null && c.unit!=='Hz' && c.unit!=='$' && c.unit!=='€') lo = Math.min(0, lo);
   if(hi - lo < 1e-9){ hi += 1; lo -= 1; }
   const pad = (hi-lo)*0.08; if(c.min==null && lo!==0) lo -= pad; if(c.max==null) hi += pad;
   const t0 = P[0][0], t1 = P[P.length-1][0];
@@ -278,10 +283,10 @@ function mchart(id, c, exp){
   let g = '';
   [lo, (lo+hi)/2, hi].forEach(v=>{ g += '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+v.toFixed(dec)+'</text>'; });
   const span = t1 - t0;
-  if(span <= 6*3600e3){ for(let k=1;k<4;k++){ const tt=t0+span*k/4; g += '<text class="ax" x="'+x(tt)+'" y="'+(H-2)+'" text-anchor="middle">'+new Date(tt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</text>'; } }
+  if(span <= 6*3600e3){ for(let k=1;k<4;k++){ const tt=t0+span*k/4; g += '<text class="ax" x="'+x(tt)+'" y="'+(H-2)+'" text-anchor="middle">'+new Date(tt).toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'})+'</text>'; } }
   else { const long = span > 8*864e5; const d0=new Date(t0); d0.setHours(24,0,0,0);
     if(long){ while(d0.getDay()!==1) d0.setDate(d0.getDate()+1); }   // weekly ticks on Mondays
-    for(const dd=new Date(d0); dd.getTime()<t1; dd.setDate(dd.getDate()+(long?7:1))){ const d=dd.getTime(), xx=x(d); g += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString('en-GB', long?{day:'numeric',month:'short'}:{weekday:'short'})+'</text>'; } }
+    for(const dd=new Date(d0); dd.getTime()<t1; dd.setDate(dd.getDate()+(long?7:1))){ const d=dd.getTime(), xx=x(d); g += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString(LOC, long?{day:'numeric',month:'short'}:{weekday:'short'})+'</text>'; } }
   const placed = [];
   (c.refs||[]).slice().sort((a,b)=>b.v-a.v).forEach(r=>{ const yy=y(Number(r.v)); if(yy<padT-1||yy>H-padB+1) return;
     // keep labels apart: if one is already close above, put this label below its line instead
@@ -290,7 +295,7 @@ function mchart(id, c, exp){
   if(c.future){ const nx = x(Date.now()); if(nx>padL && nx<W) g += '<line x1="'+nx+'" x2="'+nx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#5d6875" stroke-dasharray="2 2"/><text class="ax" x="'+(nx+3)+'" y="'+(padT+8)+'">now</text>'; }
   const pts = P.map(p=>[x(p[0]),y(p[1])]);
   const line = pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
-  const base = y(lo >= 0 && c.unit!=='Hz' && c.unit!=='$' ? 0 : lo);
+  const base = y(lo >= 0 && c.unit!=='Hz' && c.unit!=='$' && c.unit!=='€' ? 0 : lo);
   const area = line+' L'+pts[pts.length-1][0].toFixed(1)+' '+base+' L'+pts[0][0].toFixed(1)+' '+base+' Z';
   const lastv = P[P.length-1][1], peak = Math.max(...P.map(p=>p[1]));
   const head = c.future ? ('peak <b>'+peak.toFixed(dec)+' '+esc(c.unit)+'</b>') : ('now <b>'+lastv.toFixed(c.unit==='Hz'?3:dec)+' '+esc(c.unit)+'</b>');
@@ -310,7 +315,7 @@ function wireCharts(){
       let b = P[0]; for(const p of P){ if(Math.abs(p[0]-tt) < Math.abs(b[0]-tt)) b = p; }
       const bx = padL + (b[0]-t0)/(t1-t0)*(W-padL-padR); xh.setAttribute('x1',bx); xh.setAttribute('x2',bx); xh.style.display='';
       const dt = new Date(b[0]);
-      tip.innerHTML = dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'<br><b>'+b[1]+' '+esc(unit)+'</b>';
+      tip.innerHTML = dt.toLocaleDateString(LOC,{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'})+'<br><b>'+b[1]+' '+esc(unit)+'</b>';
       tip.style.display='block';
       const cr = c.getBoundingClientRect(), px = bx/W*r.width + (r.left-cr.left);
       tip.style.left = Math.min(Math.max(4, px - tip.offsetWidth/2), c.clientWidth - tip.offsetWidth - 4)+'px';
@@ -331,13 +336,15 @@ document.addEventListener('click', e=>{
 });
 function render(){
   const d = data, items = d.items || [];
+  LOC = d.nation==='US' ? 'en-US' : 'en-GB';
+  const PANELS = panelsFor(d);
   // header
   const st = document.getElementById('status');
   st.className = 'status s-' + d.overall;
   document.getElementById('statusText').textContent = LABEL[d.overall] || d.overall;
   document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
     ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
-    : 'Nothing serious in any feed. Feeds for ' + esc(d.home) + ', Wales, the UK and the world.';
+    : 'Nothing serious in any feed. Feeds for ' + esc(d.home) + ((d.region || (d.nation!=='US' && d.country)) ? ', ' + esc(d.region || d.country) : '') + (d.nation==='US' ? ', the US' : ', the UK') + ' and the world.';
   renderTension(d.tension);
   // sound
   if(soundOn){
@@ -407,12 +414,12 @@ function renderTension(t){
     return '<div>'+esc(f.name)+'</div><div style="text-align:right;font-weight:700">'+f.score+'</div><div class="fb" style="grid-column:1/-1"><b style="width:'+f.score+'%;background:'+fc+'"></b></div><div class="fd">'+esc(f.detail)+'</div>'; }).join('');
   document.getElementById('tpop').innerHTML = '<h3 style="color:'+c+'">Level '+t.level+': '+esc(t.name)+' <span style="color:var(--muted);font-weight:500;font-size:12px">(score '+t.score+'/100)</span></h3><p>'+esc(t.meaning)+'</p><div class="fac">'+facs+'</div>'
     + '<div class="scale">'+[5,4,3,2,1].map(n=>'<b style="color:'+TCOL[n]+'">'+n+'</b><span>'+TDESC[n]+(n===5?' (0-24)':n===4?' (25-44)':n===3?' (45-64)':n===2?' (65-84): grave events from 2+ outlets':' (85+): only with official confirmation')+'</span>').join('')+'</div>'
-    + '<div class="note">'+(t.learning?'<b style="color:var(--watch)">Still learning what normal looks like.</b> It compares today with its own history, so it gets more accurate after a couple of days. ':'')+'This is this dashboard\'s own index from news and official UK signals, in the spirit of DEFCON. It is not an official rating. The trend line shows the last 7 days.</div>';
+    + '<div class="note">'+(t.learning?'<b style="color:var(--watch)">Still learning what normal looks like.</b> It compares today with its own history, so it gets more accurate after a couple of days. ':'')+'This is this dashboard\'s own index from news and official '+(data && data.nation==='US'?'US':'UK')+' signals, in the spirit of DEFCON. It is not an official rating. The trend line shows the last 7 days.</div>';
 }
 document.getElementById('tension').addEventListener('click', e=>{ if(!e.target.closest('.pop')) document.getElementById('tension').classList.toggle('open'); });
 function tick(){
   const n = new Date();
-  document.getElementById('clock').textContent = n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '  ' + n.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  document.getElementById('clock').textContent = n.toLocaleTimeString(LOC,{hour:LOC==='en-US'?'numeric':'2-digit',minute:'2-digit'}) + '  ' + n.toLocaleDateString(LOC,{weekday:'short',day:'numeric',month:'short'});
   const u = document.getElementById('upd');
   if(data){
     const mins = (Date.now()-new Date(data.generated).getTime())/60000;

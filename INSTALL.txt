@@ -1,12 +1,13 @@
 EARLY WARNING - desktop dashboard
 =================================
-A live early-warning board for where you live: official UK alerts, weather and wind,
-floods and tides, power cuts, the national grid, local roads and news, world flashpoints,
-disease outbreaks, food recalls, the pound, space weather and more. Free public data only.
+A live early-warning board for where you live in the UK or the US: official alerts, weather and
+wind, floods and tides, wildfires (US), power cuts, the grid, local roads and news, world
+flashpoints, disease outbreaks, food recalls, the pound or dollar, space weather and more.
+Free public data only.
 It runs quietly in the system tray and pops up a notification if something serious happens.
 
-FIRST TIME: enter your postcode. It works out your Met Office region, flood and tide gauges,
-power network and local news. You can fine-tune what counts as "near you" and which roads to watch.
+FIRST TIME: enter your UK postcode or US ZIP code. It works out your weather warning area,
+flood, river and tide gauges, power data and local news. You can fine-tune what counts as "near you" and which roads to watch.
 
 WINDOWS
   Early-Warning-Setup-1.0.0.exe     installs it (Start menu + desktop shortcut)
@@ -32,5 +33,6 @@ USING IT
   - Settings (top right) changes location, feeds, notifications and start-with-computer.
 
 PRIVACY
-  Your postcode is only sent to postcodes.io once, to look up the area. After that the app
-  only downloads public feeds. Nothing about you is uploaded anywhere.
+  Your postcode is only sent to postcodes.io once (a US ZIP code to zippopotam.us and the
+  National Weather Service once), to look up the area. After that the app only downloads
+  public feeds. Nothing about you is uploaded anywhere.
