@@ -26,4 +26,6 @@ npm run dist:linux   # AppImage
 npm run dist:mac     # Mac zip
 ```
 
+Release installers are built by GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)): pushing a `v*` tag that matches the version in `package.json` builds all five and creates a draft release.
+
 Not an official warning system. Always follow official advice from emergency services and GOV.UK.

@@ -1,0 +1,155 @@
+# Builds the five installers on GitHub's own Windows, Mac and Linux machines.
+#
+#   Run it by hand (Actions tab > Build installers > Run workflow): builds everything and
+#   attaches the installers to the run as downloads. Nothing is published.
+#
+#   Push a version tag (git tag v1.0.1 && git push origin v1.0.1): builds everything and
+#   creates a DRAFT release with the installers and SHA256SUMS.txt. Check it, then press
+#   Publish on GitHub. The tag must match "version" in package.json.
+#
+# Windows signing (SignPath): off until these are set in the repo's Settings > Secrets and
+# variables > Actions. Once they are, the Setup and Portable .exe files are signed
+# automatically before they're released.
+#   Variables: SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG, SIGNPATH_SIGNING_POLICY_SLUG
+#   Secret:    SIGNPATH_API_TOKEN
+
+name: Build installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-builder --win --publish never
+
+      - name: Upload unsigned installers
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned
+          path: |
+            dist/Early-Warning-Setup-*.exe
+            dist/Early-Warning-Portable-*.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload signed installers
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: signed/*.exe
+          if-no-files-found: error
+
+      - name: Upload installers (unsigned, SignPath not set up yet)
+        if: vars.SIGNPATH_ORGANIZATION_ID == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/Early-Warning-Setup-*.exe
+            dist/Early-Warning-Portable-*.exe
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-builder --mac --arm64 --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: dist/Early-Warning-*-mac-*.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-builder --linux --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/Early-Warning-*.AppImage
+          if-no-files-found: error
+
+  release:
+    needs: [windows, mac, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # Fetched by name so the unsigned Windows copies never end up in the release.
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: out
+
+      - name: Checksums
+        working-directory: out
+        run: |
+          sha256sum Early-Warning-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attach installers and checksums to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-installers
+          path: out/*
+
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG doesn't match package.json version $version. Bump the version, commit, and tag again."
+            exit 1
+          fi
+          sed "s/{{VERSION}}/$version/g" .github/release-notes.md > notes.md
+          gh release create "$TAG" out/* --draft --title "Early Warning $version" --notes-file notes.md --generate-notes
