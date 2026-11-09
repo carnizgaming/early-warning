@@ -1,0 +1,36 @@
+EARLY WARNING - desktop dashboard
+=================================
+A live early-warning board for where you live: official UK alerts, weather and wind,
+floods and tides, power cuts, the national grid, local roads and news, world flashpoints,
+disease outbreaks, food recalls, the pound, space weather and more. Free public data only.
+It runs quietly in the system tray and pops up a notification if something serious happens.
+
+FIRST TIME: enter your postcode. It works out your Met Office region, flood and tide gauges,
+power network and local news. You can fine-tune what counts as "near you" and which roads to watch.
+
+WINDOWS
+  Early-Warning-Setup-1.0.0.exe     installs it (Start menu + desktop shortcut)
+  Early-Warning-Portable-1.0.0.exe  runs without installing (e.g. from a USB stick)
+  Windows will say "Windows protected your PC" because the app isn't signed by a paid
+  certificate. Click "More info" then "Run anyway". It only asks the first time.
+
+MAC  (Apple silicon M1-M4: ...mac-arm64.zip   Intel Macs: ...mac-x64.zip)
+  1. Unzip, and drag "Early Warning" into Applications.
+  2. Open Terminal and paste this line once (the app isn't signed with an Apple certificate):
+       xattr -cr "/Applications/Early Warning.app" && codesign --force --deep -s - "/Applications/Early Warning.app"
+  3. Open it from Applications. If macOS still blocks it: System Settings > Privacy & Security > Open Anyway.
+
+LINUX
+  Early-Warning-1.0.0.AppImage
+  Make it executable (right-click > Properties > Allow executing, or: chmod +x Early-Warning-1.0.0.AppImage)
+  and double-click it. Some distros need libfuse2 installed for AppImages.
+
+USING IT
+  - Closing the window keeps it running in the tray; right-click the tray icon to quit.
+  - The tray dot is green / yellow / amber / red with the overall level.
+  - Click any panel title (or its expand button) to open it full screen. Esc closes.
+  - Settings (top right) changes location, feeds, notifications and start-with-computer.
+
+PRIVACY
+  Your postcode is only sent to postcodes.io once, to look up the area. After that the app
+  only downloads public feeds. Nothing about you is uploaded anywhere.

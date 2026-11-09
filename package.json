@@ -1,0 +1,84 @@
+{
+  "name": "early-warning",
+  "productName": "Early Warning",
+  "version": "1.0.0",
+  "description": "Early warning dashboard: official alerts, weather, floods, power, grid, news flashpoints, health and more for your area.",
+  "main": "src/main.js",
+  "author": "Prepping Library",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "collect": "node src/cli.js",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "uk.prepping.earlywarning",
+    "productName": "Early Warning",
+    "files": [
+      "src/**/*",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Early Warning",
+      "artifactName": "Early-Warning-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Early-Warning-Portable-${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "Early-Warning-${version}.AppImage",
+      "syncDesktopName": true
+    },
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "artifactName": "Early-Warning-${version}-mac-${arch}.zip"
+    },
+    "publish": null
+  },
+  "devDependencies": {
+    "electron": "44.9.0",
+    "electron-builder": "26.18.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "4.5.0"
+  },
+  "desktopName": "early-warning.desktop"
+}

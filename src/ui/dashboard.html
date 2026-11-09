@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Early Warning</title>
+<style>
+:root{
+  --bg:#0b0e12; --panel:#12171d; --panel2:#171d24; --line:#232b35; --text:#e6ebf0; --muted:#8b97a5; --faint:#5d6875;
+  --info:#5d6875; --watch:#e3c341; --warning:#f08a24; --critical:#ff3b3b; --ok:#3ccf7a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.35 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
+a{color:inherit;text-decoration:none}
+.app{display:grid;grid-template-rows:auto 1fr auto;height:100vh;gap:10px;padding:10px}
+header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.status{display:flex;align-items:center;gap:12px;padding:8px 18px;border-radius:8px;font-weight:800;letter-spacing:.08em;font-size:22px;min-width:240px;justify-content:center}
+.status .dot{width:16px;height:16px;border-radius:50%;background:currentColor;box-shadow:0 0 14px currentColor}
+.s-info{background:#10291b;color:var(--ok)} .s-watch{background:#2b2610;color:var(--watch)}
+.s-warning{background:#2f1c0a;color:var(--warning)} .s-critical{background:#3a0d0d;color:var(--critical);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{background:#5c1010}}
+.reasons{color:var(--muted);font-size:13px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.reasons b{color:var(--text);font-weight:600}
+.right{text-align:right;white-space:nowrap}
+.clock{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.upd{font-size:12px;color:var(--muted)} .upd.stale{color:var(--critical);font-weight:700}
+.tools{margin-top:4px;display:flex;gap:6px;justify-content:flex-end}
+button{background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer}
+button:hover{color:var(--text)} button.on{color:var(--ok);border-color:#24603f}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:10px;min-height:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;border-top:3px solid var(--line)}
+.panel.l-watch{border-top-color:var(--watch)} .panel.l-warning{border-top-color:var(--warning)} .panel.l-critical{border-top-color:var(--critical)}
+.ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.ph h2{margin:0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;flex:1}
+.badge{font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--panel2);color:var(--muted)}
+.badge.l-watch{color:#111;background:var(--watch)} .badge.l-warning{color:#111;background:var(--warning)} .badge.l-critical{color:#fff;background:var(--critical)}
+.srcs{display:flex;gap:4px}
+.src{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.src.bad{background:var(--critical)} .src.link{background:var(--faint)}
+.list{overflow:auto;flex:1;padding:4px 0;scrollbar-width:thin;scrollbar-color:#2a333e transparent}
+.it{display:grid;grid-template-columns:4px 1fr;gap:9px;padding:6px 12px 6px 10px;border-bottom:1px solid #161c23}
+.it:hover{background:var(--panel2)}
+.bar{border-radius:2px;background:var(--info)}
+.it.l-watch .bar{background:var(--watch)} .it.l-warning .bar{background:var(--warning)} .it.l-critical .bar{background:var(--critical)}
+.t{font-weight:600;font-size:13.5px}
+.it.l-info .t{font-weight:500;color:#c7cfd8}
+.m{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+.s{font-size:12px;color:var(--faint);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tag-local{color:#fff;background:#7a1f1f;border-radius:3px;padding:0 5px;font-weight:700}
+.tag-new{color:#111;background:#9fe3ff;border-radius:3px;padding:0 5px;font-weight:700}
+.kw{color:var(--watch)}
+.empty{color:var(--faint);padding:12px;font-size:13px}
+.empty.ok{color:#3a9a62}
+.bigval{font-size:40px;font-weight:800;padding:8px 12px 0;font-variant-numeric:tabular-nums}
+.ticker{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;white-space:nowrap;height:34px;display:flex;align-items:center}
+.ticker .lbl{background:#7a1f1f;color:#fff;font-weight:800;font-size:12px;letter-spacing:.08em;padding:0 12px;height:100%;display:flex;align-items:center;flex:none}
+.track{display:inline-block;padding-left:100%;animation:scroll linear infinite}
+.track span{margin-right:48px;color:#c7cfd8}
+.track span b{color:var(--muted);font-weight:600;margin-right:6px}
+@keyframes scroll{to{transform:translateX(-100%)}}
+.wait{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:18px;text-align:center;padding:30px}
+
+header{grid-template-columns:auto auto 1fr auto !important}
+.tension{display:flex;align-items:center;gap:12px;padding:6px 12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;position:relative}
+.tension .lbl{font-size:10px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.tension .num{font-size:30px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.tension .nm{font-size:13px;font-weight:800;letter-spacing:.08em}
+.segs{display:flex;gap:3px;margin-top:4px}
+.segs i{width:22px;height:7px;border-radius:2px;background:#232b35;display:block}
+.tension svg{display:block}
+.pop{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:10;width:440px;background:#0f1419;border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 10px 40px #000a;cursor:default}
+.tension.open .pop{display:block}
+.pop h3{margin:0 0 4px;font-size:15px} .pop p{margin:4px 0 10px;color:var(--muted);font-size:13px}
+.fac{display:grid;grid-template-columns:1fr 60px;gap:2px 10px;font-size:12.5px;margin-bottom:8px}
+.fac .fb{height:6px;border-radius:3px;background:#232b35;margin-top:6px;overflow:hidden} .fac .fb b{display:block;height:100%}
+.fac .fd{grid-column:1/-1;color:var(--faint);font-size:11.5px;margin-top:-1px}
+.pop .note{font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.scale{display:grid;grid-template-columns:22px 1fr;gap:3px 8px;font-size:12px;color:var(--muted);margin:6px 0}
+.scale b{font-weight:800}
+@media (max-width:1300px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none;overflow:auto}.panel{min-height:340px;max-height:520px}html,body{overflow:auto}}
+@media (min-width:1301px) and (max-height:900px){.grid{grid-template-rows:none;grid-auto-rows:minmax(300px,1fr);overflow:auto}}
+
+@media (max-width:700px){
+  .panel.expanded{inset:6px}
+  html,body{overflow:auto}
+  .app{height:auto;min-height:100vh;padding:8px;gap:8px}
+  header{grid-template-columns:1fr auto !important;gap:10px;padding:10px}
+  header .reasons{grid-column:1/-1;order:5}
+  .status{min-width:0;font-size:18px;padding:8px 12px}
+  .tension{grid-column:1/-1;order:4;justify-content:space-between}
+  .pop{width:calc(100vw - 32px);left:-2px}
+  .right{grid-column:1/-1;order:6;text-align:left;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+  .clock{font-size:20px}
+  .tools{margin:0}
+  .grid{grid-template-columns:1fr !important;grid-template-rows:none !important;overflow:visible}
+  .panel{min-height:0;max-height:70vh}
+  .ticker{position:sticky;bottom:0}
+}
+
+.pchart{padding:8px 12px 4px;border-bottom:1px solid #161c23;position:relative}
+.pstat{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.pstat b{font-size:22px;color:var(--text);font-variant-numeric:tabular-nums}
+.pstat .ratio{font-weight:700;color:var(--text)}
+.pchart svg{display:block;width:100%;margin-top:4px;overflow:visible}
+.pchart .ax{fill:var(--faint);font-size:10px}
+.pchart .tip{position:absolute;pointer-events:none;background:#0f1419;border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:11.5px;color:var(--text);white-space:nowrap;display:none;z-index:5}
+.pchart .tip span{color:var(--muted)}
+.plegend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:2px}
+.plegend i{display:inline-block;width:14px;height:0;border-top:2px solid #4a96d6;vertical-align:middle;margin-right:4px}
+.plegend i.base{border-top:2px dashed #8b97a5}
+
+.ph .exp{background:none;border:1px solid var(--line);color:var(--muted);border-radius:5px;width:24px;height:22px;padding:0;font-size:13px;line-height:1;cursor:pointer}
+.ph .exp:hover{color:var(--text);border-color:var(--muted)}
+.ph h2{cursor:pointer}
+.backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40}
+.backdrop.on{display:block}
+.panel.expanded{position:fixed;inset:5vh 6vw;z-index:50;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.panel.expanded .list{font-size:15px}
+
+.panel.expanded .it .s{-webkit-line-clamp:4}
+.mchart{padding:8px 12px 4px;border-bottom:1px solid #161c23;position:relative}
+.mchart .mt{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+.mchart .mt b{color:var(--text);font-weight:600}
+.mchart svg{display:block;width:100%;margin-top:2px;overflow:visible}
+.mchart .ax{fill:var(--faint);font-size:10px}
+.mchart .rl{fill:var(--muted);font-size:9.5px}
+.mchart .tip{position:absolute;pointer-events:none;background:#0f1419;border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:11.5px;color:var(--text);white-space:nowrap;display:none;z-index:5}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div id="status" class="status s-info"><span class="dot"></span><span id="statusText">LOADING</span></div>
+    <div class="tension" id="tension" title="World tension level: click for the breakdown"><div><div class="lbl">WORLD TENSION</div><div style="display:flex;align-items:baseline;gap:8px"><span class="num" id="tnum">-</span><span class="nm" id="tname"></span></div><div class="segs" id="segs"></div></div><svg id="spark" width="110" height="40"></svg><div class="pop" id="tpop"></div></div>
+    <div class="reasons" id="reasons">Waiting for data...</div>
+    <div class="right">
+      <div class="clock" id="clock">--:--</div>
+      <div class="upd" id="upd"></div>
+      <div class="tools"><button id="sound" title="Beep when the status goes up or a new critical item appears">Sound off</button><button id="newsAll" title="Show every headline, not just flagged ones">Flagged news</button><button id="refreshBtn" title="Check every feed now">Refresh</button><button id="settingsBtn" title="Location, feeds and notifications">Settings</button></div>
+    </div>
+  </header>
+  <main class="grid" id="grid"></main>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="ticker"><div class="lbl">LATEST</div><div style="overflow:hidden;flex:1"><div class="track" id="track"></div></div></div>
+</div>
+<script>
+const PANELS = [
+  {id:'official', title:'Official alerts', okText:'No emergency alerts. Threat level unchanged.'},
+  {id:'weather',  title:'Weather & air', okText:'No Met Office warnings for Wales.', charts:['wind','aqi']},
+  {id:'floods',   title:'Floods & tides', okText:'No flood warnings within 40 km.', charts:['tide']},
+  {id:'power',    title:'Power cuts', okText:'No power cuts listed near you.'},
+  {id:'energy',   title:'Grid & gas', okText:'Grid normal.', charts:['freq']},
+  {id:'local',    title:'Local & roads', okText:'Nothing local flagged.'},
+  {id:'news',     title:'Flashpoints (news)', okText:'Nothing flagged in the last 48 hours.'},
+  {id:'world',    title:'Disasters & quakes', okText:'No significant global disasters.'},
+  {id:'health',   title:'Health & food', okText:'No outbreaks or food alerts flagged.'},
+  {id:'money',    title:'Money & shipping', okText:'Nothing flagged.', charts:['fx']},
+  {id:'space',    title:'Space weather & asteroids', okText:'Quiet.'},
+  {id:'cyber',    title:'Cyber & internet', okText:'No current incidents.'}
+];
+const RANK = {info:0, watch:1, warning:2, critical:3};
+const LABEL = {info:'ALL CLEAR', watch:'WATCH', warning:'WARNING', critical:'CRITICAL'};
+let data = null, lastOverall = null, seenCritical = new Set(), soundOn = false, newsAll = false, lastTicker = '';
+try { soundOn = localStorage.getItem('ew-sound') === '1'; newsAll = localStorage.getItem('ew-newsall') === '1'; } catch(e) {}
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function ago(iso){
+  if(!iso) return '';
+  const m = Math.round((Date.now() - new Date(iso).getTime())/60000);
+  if(isNaN(m)) return '';
+  if(m < -1){ const f=-m; if(f<60) return 'in '+f+' min'; const fh=Math.round(f/60); if(fh<48) return 'in '+fh+' h'; return 'in '+Math.round(fh/24)+' days'; }
+  if(m < 1) return 'just now'; if(m < 60) return m+' min ago';
+  const h = Math.round(m/60); if(h < 48) return h+' h ago';
+  return Math.round(h/24)+' days ago';
+}
+function beep(times){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    for(let i=0;i<times;i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; o.type = 'square'; g.gain.value = .08;
+      o.connect(g); g.connect(ctx.destination);
+      const t = ctx.currentTime + i*.35; o.start(t); o.stop(t+.2);
+    }
+  }catch(e){}
+}
+function showWaiting(){ document.getElementById('grid').innerHTML = '<div class="wait" style="grid-column:1/-1;grid-row:1/-1">Collecting the first set of feeds&hellip;<br><span style="font-size:14px">This takes up to a minute. It then refreshes by itself every few minutes.</span></div>'; }
+async function load(){
+  try { const d = await window.ew.getData(); if(d){ data = d; render(); } else if(!data) showWaiting(); } catch(e){ if(!data) showWaiting(); }
+  tick();
+}
+window.ew.onData(d => { data = d; render(); });
+function itemHtml(i){
+  const meta = [];
+  if(i.local) meta.push('<span class="tag-local">NEAR YOU</span>');
+  if(i.isNew) meta.push('<span class="tag-new">NEW</span>');
+  meta.push(esc(i.source));
+  if(i.time) meta.push(esc(ago(i.time)));
+  if(i.panel==='news' && i.tag && i.level!=='info') meta.push('<span class="kw">'+esc(i.tag.trim())+'</span>');
+  const sum = i.summary && i.panel!=='news' ? '<div class="s">'+esc(i.summary)+'</div>' : '';
+  const href = i.link ? ' href="'+esc(i.link)+'" target="_blank" rel="noopener"' : '';
+  return '<a class="it l-'+i.level+'"'+href+'><div class="bar"></div><div><div class="t">'+esc(i.title)+'</div><div class="m">'+meta.join('<span>&middot;</span>')+'</div>'+sum+'</div></a>';
+}
+
+function powerChart(pw, exp){
+  if(!pw || !pw.series || !pw.series.length) return '';
+  const S = pw.series, [W, H] = chartSize(exp, exp?200:96), padL = 28, padB = 14, padT = 6;
+  const max = Math.max(10, pw.baseline||0, ...S.map(p=>p.total));
+  const ymax = Math.ceil(max*1.15/10)*10;
+  const t0 = new Date(S[0].t).getTime(), t1 = Math.max(new Date(S[S.length-1].t).getTime(), t0+3600e3);
+  const x = t => padL + (new Date(t).getTime()-t0)/(t1-t0)*(W-padL-2);
+  const y = v => padT + (1 - v/ymax)*(H-padT-padB);
+  let grid = '';
+  [0, ymax/2, ymax].forEach(v=>{ grid += '<line x1="'+padL+'" x2="'+W+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35" stroke-width="1"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+Math.round(v)+'</text>'; });
+  // day labels at local midnight
+  const d0 = new Date(t0); d0.setHours(24,0,0,0);
+  for(let d=d0.getTime(); d<t1; d+=864e5){ const xx=x(d); grid += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString('en-GB',{weekday:'short'})+'</text>'; }
+  const pts = S.map(p=>[x(p.t), y(p.total)]);
+  const line = pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const area = line + ' L'+pts[pts.length-1][0].toFixed(1)+' '+y(0)+' L'+pts[0][0].toFixed(1)+' '+y(0)+' Z';
+  const base = pw.baseline ? '<line x1="'+padL+'" x2="'+W+'" y1="'+y(pw.baseline)+'" y2="'+y(pw.baseline)+'" stroke="#8b97a5" stroke-width="1.5" stroke-dasharray="4 3"/>' : '';
+  const last = pts[pts.length-1];
+  const lvl = pw.ratio>=2 ? 'warning' : pw.ratio>=1.5 ? 'watch' : 'ok';
+  const ratioTxt = pw.ratio!=null ? '<span class="ratio" style="color:var(--'+lvl+')">'+(pw.ratio>=1.5?'\u25B2 ':'')+'x'+Number(pw.ratio).toFixed(2)+' normal</span>' : '<span>learning normal (1 day)</span>';
+  const localNow = S[S.length-1].local;
+  return '<div class="pchart" data-series=\''+esc(JSON.stringify(S))+'\' data-ymax="'+ymax+'" data-w="'+W+'">'
+    + '<div class="pstat"><b>'+pw.current+'</b><span>cuts on the network now</span>'+ratioTxt+(pw.baseline?'<span>normal '+Math.round(pw.baseline)+'</span>':'')+'<span>'+localNow+' near you</span></div>'
+    + '<svg viewBox="0 0 '+W+' '+H+'" style="height:'+H+'px" role="img" aria-label="Power cuts on the network over the last 7 days">'+grid
+    + '<path d="'+area+'" fill="#4a96d6" fill-opacity=".16"/>'+base
+    + '<path d="'+line+'" fill="none" stroke="#4a96d6" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+    + '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="#4a96d6" stroke="#12171d" stroke-width="2" vector-effect="non-scaling-stroke"/>'
+    + '<line class="xh" x1="0" x2="0" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#8b97a5" stroke-width="1" vector-effect="non-scaling-stroke" style="display:none"/></svg>'
+    + '<div class="plegend"><span><i></i>cuts across South Wales &amp; West, last 7 days</span>'+(pw.baseline?'<span><i class="base"></i>normal</span>':'')+'</div>'
+    + '<div class="tip"></div></div>';
+}
+function wirePowerChart(){
+  const c = document.querySelector('.pchart'); if(!c) return;
+  const S = JSON.parse(c.dataset.series), svg = c.querySelector('svg'), tip = c.querySelector('.tip'), xh = c.querySelector('.xh');
+  const W = +c.dataset.w, padL = 28, t0 = new Date(S[0].t).getTime(), t1 = Math.max(new Date(S[S.length-1].t).getTime(), t0+3600e3);
+  function move(ev){
+    const r = svg.getBoundingClientRect(), cx = (ev.touches?ev.touches[0].clientX:ev.clientX) - r.left;
+    const tt = t0 + Math.max(0, Math.min(1, (cx/r.width*W - padL)/(W-padL-2)))*(t1-t0);
+    let best = S[0]; for(const p of S){ if(Math.abs(new Date(p.t)-tt) < Math.abs(new Date(best.t)-tt)) best = p; }
+    const bx = padL + (new Date(best.t)-t0)/(t1-t0)*(W-padL-2);
+    xh.setAttribute('x1',bx); xh.setAttribute('x2',bx); xh.style.display='';
+    const dt = new Date(best.t);
+    tip.innerHTML = dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'<br><b>'+best.total+'</b> <span>on network</span> &middot; <b>'+best.local+'</b> <span>near you</span>';
+    tip.style.display='block';
+    const px = bx/W*r.width + (svg.getBoundingClientRect().left - c.getBoundingClientRect().left);
+    tip.style.left = Math.min(Math.max(4, px - tip.offsetWidth/2), c.clientWidth - tip.offsetWidth - 4)+'px';
+    const cr = c.getBoundingClientRect(); tip.style.top = Math.max(0, (r.top - cr.top) - tip.offsetHeight + 8)+'px';
+  }
+  function out(){ tip.style.display='none'; xh.style.display='none'; }
+  svg.addEventListener('mousemove', move); svg.addEventListener('touchmove', move, {passive:true}); svg.addEventListener('touchstart', move, {passive:true});
+  svg.addEventListener('mouseleave', out); svg.addEventListener('touchend', ()=>setTimeout(out, 1500));
+}
+
+// ---------- generic mini chart: chart = {title, unit, points:[[iso,v]...], refs:[{v,label}], future, min, max}
+function chartSize(exp, h){
+  const g = document.getElementById('grid'); const cols = (getComputedStyle(g).gridTemplateColumns||'').split(' ').filter(Boolean).length || 1;
+  const w = exp ? Math.min(window.innerWidth - 24, Math.round(window.innerWidth*0.88)) - 26 : Math.round((g.clientWidth - 10*(cols-1))/cols) - 26;
+  return [Math.max(240, w), exp ? (h||200) : (h||84)];
+}
+function mchart(id, c, exp){
+  if(!c || !c.points || c.points.length < 2) return '';
+  const P = c.points.map(p=>[new Date(p[0]).getTime(), Number(p[1])]).filter(p=>!isNaN(p[0]) && !isNaN(p[1]));
+  if(P.length < 2) return '';
+  const [W, H] = chartSize(exp); const padL = 32, padR = 4, padB = 14, padT = 8;
+  const vals = P.map(p=>p[1]).concat((c.refs||[]).map(r=>Number(r.v)));
+  let lo = c.min!=null ? c.min : Math.min(...vals), hi = c.max!=null ? c.max : Math.max(...vals);
+  if(c.min==null && c.unit!=='Hz' && c.unit!=='$') lo = Math.min(0, lo);
+  if(hi - lo < 1e-9){ hi += 1; lo -= 1; }
+  const pad = (hi-lo)*0.08; if(c.min==null && lo!==0) lo -= pad; if(c.max==null) hi += pad;
+  const t0 = P[0][0], t1 = P[P.length-1][0];
+  const x = t => padL + (t-t0)/(t1-t0)*(W-padL-padR), y = v => padT + (1-(v-lo)/(hi-lo))*(H-padT-padB);
+  const dec = (hi-lo) < 2 ? 2 : (hi-lo) < 20 ? 1 : 0;
+  let g = '';
+  [lo, (lo+hi)/2, hi].forEach(v=>{ g += '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+v.toFixed(dec)+'</text>'; });
+  const span = t1 - t0;
+  if(span <= 6*3600e3){ for(let k=1;k<4;k++){ const tt=t0+span*k/4; g += '<text class="ax" x="'+x(tt)+'" y="'+(H-2)+'" text-anchor="middle">'+new Date(tt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</text>'; } }
+  else { const long = span > 8*864e5; const d0=new Date(t0); d0.setHours(24,0,0,0);
+    if(long){ while(d0.getDay()!==1) d0.setDate(d0.getDate()+1); }   // weekly ticks on Mondays
+    for(const dd=new Date(d0); dd.getTime()<t1; dd.setDate(dd.getDate()+(long?7:1))){ const d=dd.getTime(), xx=x(d); g += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString('en-GB', long?{day:'numeric',month:'short'}:{weekday:'short'})+'</text>'; } }
+  const placed = [];
+  (c.refs||[]).slice().sort((a,b)=>b.v-a.v).forEach(r=>{ const yy=y(Number(r.v)); if(yy<padT-1||yy>H-padB+1) return;
+    // keep labels apart: if one is already close above, put this label below its line instead
+    const clash = placed.some(p=>Math.abs(p-(yy-3))<11); const ly = clash ? yy+10 : yy-3; placed.push(ly);
+    g += '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+yy+'" y2="'+yy+'" stroke="#8b97a5" stroke-width="1.2" stroke-dasharray="4 3"/><text class="rl" x="'+(W-padR-2)+'" y="'+ly+'" text-anchor="end">'+esc(r.label)+'</text>'; });
+  if(c.future){ const nx = x(Date.now()); if(nx>padL && nx<W) g += '<line x1="'+nx+'" x2="'+nx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#5d6875" stroke-dasharray="2 2"/><text class="ax" x="'+(nx+3)+'" y="'+(padT+8)+'">now</text>'; }
+  const pts = P.map(p=>[x(p[0]),y(p[1])]);
+  const line = pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const base = y(lo >= 0 && c.unit!=='Hz' && c.unit!=='$' ? 0 : lo);
+  const area = line+' L'+pts[pts.length-1][0].toFixed(1)+' '+base+' L'+pts[0][0].toFixed(1)+' '+base+' Z';
+  const lastv = P[P.length-1][1], peak = Math.max(...P.map(p=>p[1]));
+  const head = c.future ? ('peak <b>'+peak.toFixed(dec)+' '+esc(c.unit)+'</b>') : ('now <b>'+lastv.toFixed(c.unit==='Hz'?3:dec)+' '+esc(c.unit)+'</b>');
+  return '<div class="mchart" data-id="'+esc(id)+'" data-pts=\''+esc(JSON.stringify(P))+'\' data-unit="'+esc(c.unit)+'" data-t0="'+t0+'" data-t1="'+t1+'" data-w="'+W+'">'
+    + '<div class="mt"><span>'+esc(c.title)+'</span><span>'+head+'</span></div>'
+    + '<svg viewBox="0 0 '+W+' '+H+'" style="height:'+H+'px" role="img" aria-label="'+esc(c.title)+'">'+g
+    + '<path d="'+area+'" fill="#4a96d6" fill-opacity=".14"/><path d="'+line+'" fill="none" stroke="#4a96d6" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+    + '<line class="xh" x1="0" x2="0" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#8b97a5" vector-effect="non-scaling-stroke" style="display:none"/></svg><div class="tip"></div></div>';
+}
+function wireCharts(){
+  document.querySelectorAll('.mchart').forEach(c=>{
+    const P = JSON.parse(c.dataset.pts), unit = c.dataset.unit, t0 = +c.dataset.t0, t1 = +c.dataset.t1, svg = c.querySelector('svg'), tip = c.querySelector('.tip'), xh = c.querySelector('.xh');
+    const W = +c.dataset.w, padL = 32, padR = 4;
+    function move(ev){
+      const r = svg.getBoundingClientRect(), cx = (ev.touches?ev.touches[0].clientX:ev.clientX) - r.left;
+      const tt = t0 + Math.max(0,Math.min(1,(cx/r.width*W - padL)/(W-padL-padR)))*(t1-t0);
+      let b = P[0]; for(const p of P){ if(Math.abs(p[0]-tt) < Math.abs(b[0]-tt)) b = p; }
+      const bx = padL + (b[0]-t0)/(t1-t0)*(W-padL-padR); xh.setAttribute('x1',bx); xh.setAttribute('x2',bx); xh.style.display='';
+      const dt = new Date(b[0]);
+      tip.innerHTML = dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'<br><b>'+b[1]+' '+esc(unit)+'</b>';
+      tip.style.display='block';
+      const cr = c.getBoundingClientRect(), px = bx/W*r.width + (r.left-cr.left);
+      tip.style.left = Math.min(Math.max(4, px - tip.offsetWidth/2), c.clientWidth - tip.offsetWidth - 4)+'px';
+      tip.style.top = Math.max(0,(r.top-cr.top) - tip.offsetHeight + 8)+'px';
+    }
+    function out(){ tip.style.display='none'; xh.style.display='none'; }
+    svg.addEventListener('mousemove',move); svg.addEventListener('touchstart',move,{passive:true}); svg.addEventListener('touchmove',move,{passive:true});
+    svg.addEventListener('mouseleave',out); svg.addEventListener('touchend',()=>setTimeout(out,1500));
+  });
+}
+let expanded = null, rsz = null;
+window.addEventListener('resize', ()=>{ clearTimeout(rsz); rsz = setTimeout(()=>{ if(data) render(); }, 250); });
+function setExpanded(id){ expanded = id; if(data) render(); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && expanded) setExpanded(null); });
+document.addEventListener('click', e=>{
+  const b = e.target.closest && e.target.closest('[data-expand]'); if(b){ e.preventDefault(); const id=b.getAttribute('data-expand'); setExpanded(expanded===id?null:id); return; }
+  if(e.target.id==='backdrop') setExpanded(null);
+});
+function render(){
+  const d = data, items = d.items || [];
+  // header
+  const st = document.getElementById('status');
+  st.className = 'status s-' + d.overall;
+  document.getElementById('statusText').textContent = LABEL[d.overall] || d.overall;
+  document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
+    ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
+    : 'Nothing serious in any feed. Feeds for ' + esc(d.home) + ', Wales, the UK and the world.';
+  renderTension(d.tension);
+  // sound
+  if(soundOn){
+    if(lastOverall && RANK[d.overall] > RANK[lastOverall]) beep(d.overall==='critical'?5:2);
+    items.filter(i=>i.level==='critical' && !seenCritical.has(i.id)).forEach((i,n)=>{ if(lastOverall && n===0) beep(5); });
+  }
+  items.filter(i=>i.level==='critical').forEach(i=>seenCritical.add(i.id));
+  lastOverall = d.overall;
+  // panels
+  const grid = document.getElementById('grid'); let html = '';
+  for(const p of PANELS){
+    let list = items.filter(i=>i.panel===p.id);
+    if(p.id==='news' && !newsAll) list = list.filter(i=>i.level!=='info');
+    if(p.id==='news'){ const seen=new Set(); list = list.filter(i=>{const k=i.title.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;}); }
+    list.sort((a,b)=> (RANK[b.level]-RANK[a.level]) || ((b.local?1:0)-(a.local?1:0)) || (new Date(b.time||0)-new Date(a.time||0)));
+    if(p.id==='power') list.sort((a,b)=> (a.tag==='power-summary'?1:0)-(b.tag==='power-summary'?1:0) || (RANK[b.level]-RANK[a.level]));
+    const top = list.reduce((m,i)=>RANK[i.level]>RANK[m]?i.level:m,'info');
+    const srcs = (d.sources||[]).filter(s=>s.panel===p.id);
+    const dots = srcs.map(s=>'<a href="'+esc(s.link)+'" target="_blank" class="src '+(s.ok===false?'bad':s.ok===null?'link':'')+'" title="'+esc(s.name)+(s.ok===false?' - NOT RESPONDING: '+esc(s.error):s.ok===null?' - '+esc(s.error):' - OK, '+s.count+' items')+'"></a>').join('');
+    const flagged = list.filter(i=>i.level!=='info').length;
+    const badge = flagged ? '<span class="badge l-'+top+'">'+flagged+'</span>' : '<span class="badge">'+list.length+'</span>';
+    let body = '';
+    const isExp = expanded===p.id;
+    if(p.id==='power') body += powerChart(d.power, isExp);
+    (p.charts||[]).forEach((cid,ci)=>{ if((isExp || ci===0) && d.charts && d.charts[cid]) body += mchart(cid, d.charts[cid], isExp); });
+    if(p.id==='space'){
+      const kp = items.find(i=>i.tag==='kp');
+      if(kp && kp.value!=null) body += '<div class="bigval" style="color:var(--'+(kp.level==='info'?'ok':kp.level)+')">Kp '+Number(kp.value).toFixed(1)+'</div>';
+    }
+    const failed = srcs.filter(s=>s.ok===false);
+    if(list.length) body += list.slice(0, isExp?300:60).map(itemHtml).join('');
+    else body += '<div class="empty '+(failed.length===srcs.length && srcs.length?'':'ok')+'">'+(failed.length===srcs.length && srcs.length ? 'Feed not responding.' : esc(p.okText))+'</div>';
+    if(failed.length && list.length) body += '<div class="empty">Not responding: '+failed.map(s=>esc(s.name)).join(', ')+'</div>';
+    srcs.filter(s=>s.ok===null).forEach(s=>{ body += '<a class="empty" style="display:block" href="'+esc(s.link)+'" target="_blank">&#8599; '+esc(s.name)+': open to check</a>'; });
+    html += '<section class="panel l-'+top+(isExp?' expanded':'')+'" data-panel="'+p.id+'"><div class="ph"><h2 data-expand="'+p.id+'" title="Click to '+(isExp?'close':'expand')+'">'+esc(p.title)+'</h2><span class="srcs">'+dots+'</span>'+badge+'<button class="exp" data-expand="'+p.id+'" title="'+(isExp?'Close (Esc)':'Expand')+'" aria-label="'+(isExp?'Close':'Expand')+'">'+(isExp?'&times;':'&#x2922;')+'</button></div><div class="list">'+body+'</div></section>';
+  }
+  const scrolls = [...grid.querySelectorAll('.list')].map(l=>l.scrollTop);
+  grid.innerHTML = html;
+  wirePowerChart(); wireCharts();
+  document.getElementById('backdrop').classList.toggle('on', !!expanded);
+  [...grid.querySelectorAll('.list')].forEach((l,i)=>l.scrollTop = scrolls[i]||0);
+  // ticker
+  const heads = items.filter(i=>i.panel==='news').sort((a,b)=>new Date(b.time||0)-new Date(a.time||0)).slice(0,25);
+  const tk = heads.map(i=>'<span><b>'+esc(i.source)+'</b>'+esc(i.title)+'</span>').join('');
+  if(tk !== lastTicker){ const tr = document.getElementById('track'); tr.innerHTML = tk; tr.style.animationDuration = Math.max(60, heads.length*9)+'s'; lastTicker = tk; }
+  tick();
+}
+
+const TCOL = {5:'#3ccf7a',4:'#9fd356',3:'#e3c341',2:'#f08a24',1:'#ff3b3b'};
+const TDESC = {5:'Normal',4:'Raised',3:'Elevated',2:'Severe',1:'Critical'};
+function renderTension(t){
+  const el = document.getElementById('tension');
+  if(!t){ el.style.display='none'; return; } el.style.display='';
+  const c = TCOL[t.level];
+  document.getElementById('tnum').textContent = t.level; document.getElementById('tnum').style.color = c;
+  document.getElementById('tname').textContent = t.name; document.getElementById('tname').style.color = c;
+  document.getElementById('segs').innerHTML = [5,4,3,2,1].map(n=>'<i style="background:'+(n>=t.level?TCOL[n]:'#232b35')+'"></i>').join('');
+  el.style.borderColor = t.level<=2 ? c : 'var(--line)';
+  const tr = (t.trend||[]).slice(-168), sv = document.getElementById('spark');
+  if(tr.length>1){
+    const w=110,h=40, pts = tr.map((v,i)=>[(i/(tr.length-1))*w, h-3-(Math.min(100,v)/100)*(h-6)]);
+    const bands = [[25,'#9fd35622'],[45,'#e3c34122'],[65,'#f08a2422'],[85,'#ff3b3b22']].map(([v,col])=>'<line x1="0" x2="'+w+'" y1="'+(h-3-v/100*(h-6))+'" y2="'+(h-3-v/100*(h-6))+'" stroke="'+col.slice(0,7)+'" stroke-opacity=".35" stroke-dasharray="2 3"/>').join('');
+    sv.innerHTML = bands + '<polyline fill="none" stroke="'+c+'" stroke-width="1.8" points="'+pts.map(p=>p.map(n=>n.toFixed(1)).join(',')).join(' ')+'"/>';
+    sv.style.display='';
+  } else sv.style.display='none';
+  const facs = (t.factors||[]).map(f=>{ const fc = f.score>=85?TCOL[1]:f.score>=65?TCOL[2]:f.score>=45?TCOL[3]:f.score>=25?TCOL[4]:TCOL[5];
+    return '<div>'+esc(f.name)+'</div><div style="text-align:right;font-weight:700">'+f.score+'</div><div class="fb" style="grid-column:1/-1"><b style="width:'+f.score+'%;background:'+fc+'"></b></div><div class="fd">'+esc(f.detail)+'</div>'; }).join('');
+  document.getElementById('tpop').innerHTML = '<h3 style="color:'+c+'">Level '+t.level+': '+esc(t.name)+' <span style="color:var(--muted);font-weight:500;font-size:12px">(score '+t.score+'/100)</span></h3><p>'+esc(t.meaning)+'</p><div class="fac">'+facs+'</div>'
+    + '<div class="scale">'+[5,4,3,2,1].map(n=>'<b style="color:'+TCOL[n]+'">'+n+'</b><span>'+TDESC[n]+(n===5?' (0-24)':n===4?' (25-44)':n===3?' (45-64)':n===2?' (65-84): grave events from 2+ outlets':' (85+): only with official confirmation')+'</span>').join('')+'</div>'
+    + '<div class="note">'+(t.learning?'<b style="color:var(--watch)">Still learning what normal looks like.</b> It compares today with its own history, so it gets more accurate after a couple of days. ':'')+'This is this dashboard\'s own index from news and official UK signals, in the spirit of DEFCON. It is not an official rating. The trend line shows the last 7 days.</div>';
+}
+document.getElementById('tension').addEventListener('click', e=>{ if(!e.target.closest('.pop')) document.getElementById('tension').classList.toggle('open'); });
+function tick(){
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) + '  ' + n.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+  const u = document.getElementById('upd');
+  if(data){
+    const mins = (Date.now()-new Date(data.generated).getTime())/60000;
+    const stale = mins > Math.max(20,(data.refreshMinutes||5)*4);
+    u.textContent = stale ? 'DATA IS '+Math.round(mins)+' MIN OLD: offline, or the computer was asleep?' : 'Updated '+ago(data.generated);
+    u.className = 'upd' + (stale?' stale':'');
+    const okc = (data.sources||[]).filter(s=>s.ok===true).length, all = (data.sources||[]).filter(s=>s.ok!==null).length;
+    if(!stale) u.textContent += ' · '+okc+'/'+all+' feeds OK';
+  }
+}
+const sb = document.getElementById('sound'), nb = document.getElementById('newsAll');
+function btns(){ sb.textContent = soundOn?'Sound on':'Sound off'; sb.className = soundOn?'on':''; nb.textContent = newsAll?'All news':'Flagged news'; nb.className = newsAll?'on':''; }
+sb.onclick = ()=>{ soundOn=!soundOn; try{localStorage.setItem('ew-sound',soundOn?'1':'0')}catch(e){} if(soundOn) beep(1); btns(); };
+nb.onclick = ()=>{ newsAll=!newsAll; try{localStorage.setItem('ew-newsall',newsAll?'1':'0')}catch(e){} btns(); if(data) render(); };
+btns();
+document.getElementById('refreshBtn').onclick = async (e)=>{ const b=e.target; b.textContent='Checking…'; b.disabled=true; try{ const d=await window.ew.refresh(); if(d){data=d;render();} } finally { b.textContent='Refresh'; b.disabled=false; } };
+document.getElementById('settingsBtn').onclick = ()=>window.ew.openSettings();
+load(); setInterval(load, 60000); setInterval(tick, 15000);
+</script>
+</body>
+</html>

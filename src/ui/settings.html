@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Early Warning - Settings</title>
+<style>
+:root{--bg:#0b0e12;--panel:#12171d;--panel2:#171d24;--line:#232b35;--text:#e6ebf0;--muted:#8b97a5;--faint:#5d6875;--accent:#f08a24;--ok:#3ccf7a;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+main{max-width:700px;margin:0 auto;padding:22px 20px 40px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:26px 0 8px}
+p.lead{color:var(--muted);margin:0 0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+label:first-child{margin-top:0}
+.hint{color:var(--faint);font-size:12.5px;font-weight:400;margin-top:3px}
+input[type=text],select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:9px 10px;font:inherit}
+input[type=text]:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+button{font:inherit;border-radius:7px;padding:9px 16px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#111;font-weight:700}
+button:disabled{opacity:.6;cursor:default}
+.found{margin-top:12px;display:none}
+.found.on{display:block}
+.facts{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;font-size:13px;margin:6px 0 2px}
+.facts dt{color:var(--muted)} .facts dd{margin:0}
+.err{color:var(--bad);margin-top:8px;display:none}
+.feeds{columns:2;column-gap:20px}
+.feeds .grp{break-inside:avoid;margin-bottom:10px}
+.feeds .grp b{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-weight:400;margin:4px 0;cursor:pointer}
+.chk input{margin-top:3px}
+.actions{display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:10px;flex-wrap:wrap}
+.small{font-size:12.5px;color:var(--faint)}
+a{color:var(--accent)}
+@media (max-width:560px){.feeds{columns:1}.facts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="h">Set up Early Warning</h1>
+  <p class="lead" id="lead">Enter your postcode and the dashboard picks the right weather region, flood and tide gauges, power network and local news for where you live. Nothing is sent anywhere except the public feeds themselves.</p>
+
+  <div class="card">
+    <label for="pc">Your postcode</label>
+    <div class="row"><input type="text" id="pc" placeholder="e.g. SW1A 1AA or just SW1A" autocomplete="postal-code"><button id="find" style="flex:0 0 auto">Look up</button></div>
+    <div class="hint">A full postcode is most accurate. Just the first half (the district) works too and reveals less.</div>
+    <div class="err" id="err"></div>
+    <div class="found" id="found">
+      <dl class="facts" id="facts"></dl>
+    </div>
+  </div>
+
+  <div id="more" style="display:none">
+    <h2>Fine-tune</h2>
+    <div class="card">
+      <label for="name">Place name shown on the dashboard</label>
+      <input type="text" id="name">
+      <label for="met">Met Office warning region</label>
+      <select id="met"></select>
+      <label for="local">Words that mean "near you"</label>
+      <input type="text" id="local">
+      <div class="hint">Comma-separated. Headlines and alerts containing these are tagged NEAR YOU. Add nearby towns, rivers, landmarks.</div>
+      <label for="near">Nearby postcode districts (for power cuts)</label>
+      <input type="text" id="near">
+      <label for="news">Local news search terms</label>
+      <input type="text" id="news">
+      <div class="hint">Comma-separated places for the local news panel.</div>
+      <label for="roads">Roads and places to watch for incidents</label>
+      <input type="text" id="roads" placeholder="e.g. M6, A38, Thelwall Viaduct">
+      <div class="hint">Comma-separated. Road closures, crashes and high-wind restrictions on these are flagged. Leave empty to skip roads.</div>
+      <div class="row">
+        <div><label for="paper">Local paper RSS feed (optional)</label><input type="text" id="paper" placeholder="https://…/news/rss/"></div>
+        <div><label for="papername">Paper name</label><input type="text" id="papername" placeholder="e.g. your local paper"></div>
+      </div>
+      <label for="nasa">NASA API key (optional)</label>
+      <input type="text" id="nasa" placeholder="Leave blank to use the shared demo key">
+      <div class="hint">Free from <a href="https://api.nasa.gov/" target="_blank">api.nasa.gov</a>. Only needed if the solar storm feed keeps saying "Too Many Requests".</div>
+    </div>
+
+    <h2>Feeds</h2>
+    <div class="card"><div class="feeds" id="feeds"></div></div>
+
+    <h2>Behaviour</h2>
+    <div class="card">
+      <label class="chk"><input type="checkbox" id="notif" checked> Pop-up notifications for new serious alerts</label>
+      <label class="chk"><input type="checkbox" id="auto" checked> Start with this computer (runs quietly in the tray)</label>
+      <label for="every">Check feeds every</label>
+      <select id="every"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select>
+    </div>
+  </div>
+
+  <div class="actions">
+    <span class="small">Data comes from free public sources: GOV.UK, Met Office, Environment Agency, Open-Meteo, Elexon, NASA, WHO and others. <a href="#" id="log">Open the log</a></span>
+    <button class="primary" id="save" disabled>Save and start</button>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const PANEL = { official:'Official alerts', weather:'Weather & air', floods:'Floods & tides', power:'Power cuts', energy:'Grid & gas', local:'Local & roads', news:'Flashpoints (news)', tension:'World tension', world:'Disasters & quakes', health:'Health & food', money:'Money & shipping', space:'Space weather & asteroids', cyber:'Cyber & internet' };
+const DNO = { NGED:'National Grid (live power-cut data included)', SPEN:'SP Energy Networks (no live data: link only)', other:'Not National Grid (no live data: link only)' };
+let home = null, disabled = new Set(), current = null;
+const list = v => String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
+
+async function init(){
+  const r = await window.ew.getSettings();
+  const sel = $('met'); for (const [k,v] of Object.entries(r.metRegions)) { const o=document.createElement('option'); o.value=k; o.textContent=v; sel.appendChild(o); }
+  $('auto').checked = r.settings ? r.autostart : true;
+  if (r.settings) {
+    current = r.settings; home = { ...r.settings.home };
+    $('h').textContent = 'Settings'; $('save').textContent = 'Save'; $('lead').textContent = 'Change your location, what counts as local, and which feeds appear.';
+    $('pc').value = home.postcode || '';
+    disabled = new Set(r.settings.disabledFeeds || []);
+    $('notif').checked = r.settings.notifications !== false;
+    $('every').value = String(r.settings.refreshMinutes || 5);
+    $('nasa').value = r.settings.nasaKey || '';
+    fill(); await renderFeeds();
+  }
+}
+function fill(){
+  $('found').classList.add('on'); $('more').style.display = ''; $('save').disabled = false;
+  $('facts').innerHTML = [
+    ['Place', home.name], ['Nation', home.country + (home.region ? ' · ' + home.region : '')], ['Council', home.district||'-'],
+    ['Map position', home.lat + ', ' + home.lon], ['Power network', DNO[home.dno] || home.dno],
+    ['Tide gauge', home.tideStation ? `${home.tideStation.label} (${home.tideStation.km} km)` : 'None within 40 km (inland, or outside England/Wales)']
+  ].map(([a,b])=>`<dt>${a}</dt><dd>${String(b).replace(/</g,'&lt;')}</dd>`).join('');
+  $('name').value = home.name || ''; $('met').value = home.metRegion || 'se';
+  $('local').value = (home.localWords||[]).join(', '); $('near').value = (home.nearPostcodes||[]).join(', ');
+  $('news').value = (home.localNews||[]).join(', '); $('roads').value = (home.roads||[]).join(', ');
+  $('paper').value = home.paperRss || ''; $('papername').value = home.paperName || '';
+}
+function collectHome(){
+  return { ...home, name: $('name').value.trim() || home.name, metRegion: $('met').value,
+    localWords: list($('local').value).map(x=>x.toLowerCase()), nearPostcodes: list($('near').value).map(x=>x.toUpperCase()),
+    localNews: list($('news').value), roads: list($('roads').value), paperRss: $('paper').value.trim(), paperName: $('papername').value.trim() };
+}
+async function renderFeeds(){
+  const feeds = await window.ew.feedsFor({ home: collectHome() });
+  const groups = {}; for (const f of feeds) (groups[f.panel] = groups[f.panel] || []).push(f);
+  $('feeds').innerHTML = Object.keys(PANEL).filter(p=>groups[p]).map(p => `<div class="grp"><b>${PANEL[p]}</b>` + groups[p].map(f =>
+    `<label class="chk"><input type="checkbox" data-id="${f.id}" ${disabled.has(f.id)?'':'checked'}> ${f.name.replace(/</g,'&lt;')}</label>`).join('') + '</div>').join('');
+  $('feeds').querySelectorAll('input').forEach(i => i.onchange = () => { if (i.checked) disabled.delete(i.dataset.id); else disabled.add(i.dataset.id); });
+}
+$('find').onclick = async () => {
+  const b = $('find'); b.disabled = true; b.textContent = 'Looking up…'; $('err').style.display = 'none';
+  const r = await window.ew.locate($('pc').value);
+  b.disabled = false; b.textContent = 'Look up';
+  if (!r.ok) { $('err').textContent = 'Couldn\'t find that postcode (' + r.error + '). Check it and that you\'re online.'; $('err').style.display = 'block'; return; }
+  const keep = home ? { roads: home.roads, paperRss: home.paperRss, paperName: home.paperName } : {};
+  home = { ...r.home, ...(home && home.postcode === r.home.postcode ? keep : {}) };
+  fill(); await renderFeeds();
+};
+$('pc').addEventListener('keydown', e => { if (e.key === 'Enter') $('find').click(); });
+['roads','paper','news'].forEach(id => $(id).addEventListener('change', renderFeeds));
+$('save').onclick = async () => {
+  $('save').disabled = true; $('save').textContent = current ? 'Saving…' : 'Starting…';
+  await window.ew.saveSettings({ home: collectHome(), disabledFeeds: [...disabled], notifications: $('notif').checked, refreshMinutes: +$('every').value, nasaKey: $('nasa').value.trim() }, $('auto').checked);
+};
+$('log').onclick = e => { e.preventDefault(); window.ew.openLog(); };
+init();
+</script>
+</body>
+</html>
