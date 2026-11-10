@@ -563,6 +563,27 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const order = Object.fromEntries(feeds.map((f, i) => [f.id, i]));
   items.sort((a, b) => order[a.feed] - order[b.feed]); sources.sort((a, b) => order[a.id] - order[b.id]);
 
+  // ---------- same story from several outlets ----------
+  // Outlets word the same story differently, so match on shared key words, not exact titles.
+  // The most serious copy (then the first by feed order) leads; the rest become "also" on it.
+  const newsRaw = items.filter(i => i.panel === 'news');
+  const STOP = new Set('the and for with from after over says said amid into about than that this what when where which while will would could has have had not but are was were been its their they them his her him how why who new more most just still into onto out off top up down day week year years live latest update updates news report reports watch inside analysis explainer opinion'.split(' '));
+  const keyWords = t => new Set(t.toLowerCase().replace(/['’]s\b/g, '').replace(/(\w)-(\w)/g, '$1$2').replace(/[^a-z0-9]+/g, ' ').split(' ')
+    .filter(w => w.length >= 3 && !STOP.has(w)).map(w => w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w));
+  // names (capitalised words) stop "39 die as boat sinks off Senegal" matching "13 die as boat sinks off Crete":
+  // if both titles name things, they must share at least one
+  const names = t => new Set((t.match(/\b[A-Z][a-zA-Z]+/g) || []).map(w => w.toLowerCase()).filter(w => w.length >= 3 && !STOP.has(w)));
+  const share = (a, b) => { let n = 0; for (const w of a) if (b.has(w)) n++; return n; };
+  const sameStory = (a, b) => { const n = share(a.w, b.w); return n >= 3 && n / Math.min(a.w.size, b.w.size) >= 0.5 && (!a.n.size || !b.n.size || share(a.n, b.n) > 0); };
+  const stories = [];
+  for (const i of [...newsRaw].sort((a, b) => RANK[b.level] - RANK[a.level])) {   // stable sort keeps feed order within a level
+    const w = { w: keyWords(i.title), n: names(i.title) }; const s = stories.find(s => sameStory(s.w, w));
+    if (s) { s.lead.also = s.lead.also || []; s.lead.also.push({ source: i.source, title: i.title, link: i.link }); s.lead.sameStory.push(i.id); i.merged = true; }
+    else { i.sameStory = []; stories.push({ lead: i, w }); }
+  }
+  for (let k = items.length - 1; k >= 0; k--) if (items[k].merged) items.splice(k, 1);
+  for (const i of newsRaw) delete i.merged;
+
   // charts travel separately
   const charts = {};
   for (const i of items) if (i.chart) { charts[i.feed] = i.chart; delete i.chart; }
@@ -601,13 +622,14 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const clamp = x => Math.max(0, Math.min(100, x));
   const factors = [];
   const heads = {}; for (const i of items.filter(i => i.panel === 'news')) { const k = i.title.toLowerCase().replace(/[^a-z0-9 ]/g, ''); if (!heads[k]) heads[k] = i; }
-  let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level];
+  // each story counts once, plus a quarter for each extra outlet covering it (up to two): wide coverage matters, but not threefold
+  let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level] * (1 + 0.25 * Math.min(2, new Set((i.also || []).map(a => a.source).filter(s => s !== i.source)).size));
   const histFile = path.join(dataDir, 'tension-history.json');
   let hist = readJson(histFile, []).filter(x => x && ageHours(x.t) < 24 * 14);
   const older = hist.filter(x => ageHours(x.t) > 24).map(x => +x.w).sort((a, b) => a - b);
   let baseW = older.length >= 48 ? older[Math.floor(older.length / 2)] : (settings.tension && settings.tension.newsBaseline) || 25; if (baseW < 5) baseW = 5;
   const cNews = clamp((W / baseW - 0.8) * 60);
-  factors.push({ name: 'Crisis headlines', score: Math.round(cNews), detail: `${Object.values(heads).filter(i => i.level !== 'info').length} flagged headlines, weight ${Math.round(W)} vs normal ${Math.round(baseW)}` });
+  factors.push({ name: 'Crisis headlines', score: Math.round(cNews), detail: `${Object.values(heads).filter(i => i.level !== 'info').length} flagged stories, weight ${Math.round(W)} vs normal ${Math.round(baseW)}` });
   const g = items.find(i => i.tag === 'gdelt'); let cG = null;
   if (g) { cG = clamp((+g.value - 0.9) * 80); factors.push({ name: 'World conflict coverage (GDELT)', score: Math.round(cG), detail: `x${(+g.value).toFixed(2)} vs previous 6 days` }); }
   let cO = 0; const od = [];
@@ -619,7 +641,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const parts = [[cNews, 0.4], [cO, 0.3]]; if (cG !== null) parts.push([cG, 0.3]);
   let score = parts.reduce((s, p) => s + p[0] * p[1], 0) / parts.reduce((s, p) => s + p[1], 0);
   const trip = [];
-  for (const k of kw.critical) { const srcs = new Set(items.filter(i => i.panel === 'news' && ageHours(i.time) <= 24 && ` ${i.title} ${i.summary} `.toLowerCase().includes(k)).map(i => i.source)); if (srcs.size >= 2) trip.push(`'${k}' (${srcs.size} outlets)`); }
+  for (const k of kw.critical) { const srcs = new Set(newsRaw.filter(i => ageHours(i.time) <= 24 && ` ${i.title} ${i.summary} `.toLowerCase().includes(k)).map(i => i.source)); if (srcs.size >= 2) trip.push(`'${k}' (${srcs.size} outlets)`); }
   const official = ga || (thr && thr.official);
   if (trip.length) { score = Math.max(score, 66); factors.push({ name: 'Tripwire', score: 66, detail: trip.join(', ') }); }
   if (trip.length && official) score = Math.max(score, 90);
@@ -640,9 +662,12 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const seenFile = path.join(dataDir, 'seen.json');
   const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [];
   for (const i of items) {
-    if (!seen[i.id]) { seen[i.id] = iso(now); i.isNew = true; if (RANK[i.level] >= RANK.warning && (!i.isNews || i.local || i.level === 'critical')) fresh.push(i); }
-    else i.isNew = ageHours(seen[i.id]) < 1;
-    i.firstSeen = seen[i.id];
+    // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
+    const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
+    if (!prev) { i.isNew = true; if (RANK[i.level] >= RANK.warning && (!i.isNews || i.local || i.level === 'critical')) fresh.push(i); }
+    else i.isNew = ageHours(prev) < 1;
+    for (const x of ids) if (!seen[x]) seen[x] = prev || iso(now);
+    i.firstSeen = prev || iso(now); delete i.sameStory;
   }
   for (const k of Object.keys(seen)) if (ageHours(seen[k]) >= 24 * 14) delete seen[k];
   writeJson(seenFile, seen);

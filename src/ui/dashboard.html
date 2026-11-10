@@ -50,6 +50,7 @@ button:hover{color:var(--text)} button.on{color:var(--ok);border-color:#24603f}
 .tag-local{color:#fff;background:#7a1f1f;border-radius:3px;padding:0 5px;font-weight:700}
 .tag-new{color:#111;background:#9fe3ff;border-radius:3px;padding:0 5px;font-weight:700}
 .kw{color:var(--watch)}
+.also{color:var(--text);opacity:.75}
 .empty{color:var(--faint);padding:12px;font-size:13px}
 .empty.ok{color:#3a9a62}
 .bigval{font-size:40px;font-weight:800;padding:8px 12px 0;font-variant-numeric:tabular-nums}
@@ -202,6 +203,9 @@ function itemHtml(i){
   if(i.local) meta.push('<span class="tag-local">NEAR YOU</span>');
   if(i.isNew) meta.push('<span class="tag-new">NEW</span>');
   meta.push(esc(i.source));
+  // the same story from other outlets (merged by the collector); the whole row is one link, so these are names with their headlines on hover
+  if(i.also && i.also.length){ const others = [...new Set(i.also.map(a=>a.source).filter(s=>s!==i.source))];
+    if(others.length) meta.push('<span class="also" title="'+esc(i.also.map(a=>a.source+': '+a.title).join('\n'))+'">also '+esc(others.join(', '))+'</span>'); }
   if(i.time) meta.push(esc(ago(i.time)));
   if(i.panel==='news' && i.tag && i.level!=='info') meta.push('<span class="kw">'+esc(i.tag.trim())+'</span>');
   const sum = i.summary && i.panel!=='news' ? '<div class="s">'+esc(i.summary)+'</div>' : '';
