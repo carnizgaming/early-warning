@@ -10,7 +10,7 @@
   --bg:#0b0e12; --panel:#12171d; --panel2:#171d24; --line:#232b35; --text:#e6ebf0; --muted:#8b97a5; --faint:#5d6875;
   --info:#5d6875; --watch:#e3c341; --warning:#f08a24; --critical:#ff3b3b; --ok:#3ccf7a;
 }
-*{box-sizing:border-box}
+*{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#2a333e transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.35 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
 a{color:inherit;text-decoration:none}
 .app{display:grid;grid-template-rows:auto 1fr auto;height:100vh;gap:10px;padding:10px}
@@ -84,7 +84,7 @@ header{grid-template-columns:auto auto 1fr auto !important}
 .pop .note{font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .scale{display:grid;grid-template-columns:22px 1fr;gap:3px 8px;font-size:12px;color:var(--muted);margin:6px 0}
 .scale b{font-weight:800}
-@media (max-width:1300px){html,body{overflow:auto}}
+@media (max-width:1300px){html,body{overflow:auto} header{grid-template-columns:auto auto 1fr !important} header .reasons{grid-column:1/-1;order:5}}
 
 @media (max-width:700px){
   .panel.expanded{inset:6px}
@@ -110,7 +110,8 @@ header{grid-template-columns:auto auto 1fr auto !important}
 .pchart .ax{fill:var(--faint);font-size:10px}
 .pchart .tip{position:absolute;pointer-events:none;background:#0f1419;border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:11.5px;color:var(--text);white-space:nowrap;display:none;z-index:5}
 .pchart .tip span{color:var(--muted)}
-.plegend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:2px}
+.plegend{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:11px;color:var(--muted);margin-top:2px}
+.plegend span{white-space:nowrap}
 .plegend i{display:inline-block;width:14px;height:0;border-top:2px solid #4a96d6;vertical-align:middle;margin-right:4px}
 .plegend i.base{border-top:2px dashed #8b97a5}
 
@@ -201,9 +202,9 @@ async function load(){
 }
 window.ew.onData(d => { data = d; render(); });
 function itemHtml(i){
-  const meta = [];
-  if(i.local) meta.push('<span class="tag-local">NEAR YOU</span>');
-  if(i.isNew) meta.push('<span class="tag-new">NEW</span>');
+  const meta = [], chips = [];
+  if(i.local && !i.reading) chips.push('<span class="tag-local">NEAR YOU</span>');
+  if(i.isNew) chips.push('<span class="tag-new">NEW</span>');
   meta.push(esc(i.outlet || i.source));   // a news search result names its outlet
   if(i.standing) meta.push('no recent change');
   if(i.changed) meta.push('changed '+esc(ago(i.changed)));
@@ -214,7 +215,7 @@ function itemHtml(i){
   if(i.panel==='news' && i.tag && i.level!=='info') meta.push('<span class="kw">'+esc(i.tag.trim())+'</span>');
   const sum = i.summary && i.panel!=='news' ? '<div class="s">'+esc(i.summary)+'</div>' : '';
   const href = i.link ? ' href="'+esc(i.link)+'" target="_blank" rel="noopener"' : '';
-  return '<a class="it l-'+i.level+'"'+href+'><div class="bar"></div><div><div class="t">'+esc(i.title)+'</div><div class="m">'+meta.join('<span>&middot;</span>')+'</div>'+sum+'</div></a>';
+  return '<a class="it l-'+i.level+'"'+href+'><div class="bar"></div><div><div class="t">'+esc(i.title)+'</div><div class="m">'+chips.join('')+meta.join('<span>&middot;</span>')+'</div>'+sum+'</div></a>';
 }
 
 function powerChart(pw, exp){
@@ -245,7 +246,7 @@ function powerChart(pw, exp){
     + '<path d="'+line+'" fill="none" stroke="#4a96d6" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
     + '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="3.5" fill="#4a96d6" stroke="#12171d" stroke-width="2" vector-effect="non-scaling-stroke"/>'
     + '<line class="xh" x1="0" x2="0" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#8b97a5" stroke-width="1" vector-effect="non-scaling-stroke" style="display:none"/></svg>'
-    + '<div class="plegend"><span><i></i>cuts across the National Grid network (Midlands, South West, South Wales), last 7 days</span>'+(pw.baseline?'<span><i class="base"></i>normal</span>':'')+'</div>'
+    + '<div class="plegend" title="National Grid network: Midlands, South West and South Wales"><span><i></i>cuts across the network, last 7 days</span>'+(pw.baseline?'<span><i class="base"></i>normal</span>':'')+'</div>'
     + '<div class="tip"></div></div>';
 }
 function wirePowerChart(){
@@ -289,13 +290,23 @@ function mchart(id, c, exp){
   const t0 = P[0][0], t1 = P[P.length-1][0];
   const x = t => padL + (t-t0)/(t1-t0)*(W-padL-padR), y = v => padT + (1-(v-lo)/(hi-lo))*(H-padT-padB);
   const dec = (hi-lo) < 2 ? 2 : (hi-lo) < 20 ? 1 : 0;
+  // gridlines on round numbers (0, 20, 40 rather than 0, 32.5, 65); a chart with a fixed range keeps bottom, middle and top
+  let ticks = [lo, (lo+hi)/2, hi], tdec = dec;
+  if(c.min==null || c.max==null){ const mag = Math.pow(10, Math.floor(Math.log10(hi-lo)));
+    for(const m of [0.1,0.2,0.5,1,2,5,10]){ const step = m*mag, t = [];
+      for(let k = Math.ceil(lo/step - 1e-9); k*step <= hi + step*1e-9; k++) t.push(k*step);
+      if(t.length <= 4){ if(t.length >= 2){ ticks = t; tdec = step < 0.01 ? 3 : step < 0.1 ? 2 : step < 1 ? 1 : 0; } break; } } }
   let g = '';
-  [lo, (lo+hi)/2, hi].forEach(v=>{ g += '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+v.toFixed(dec)+'</text>'; });
+  ticks.forEach(v=>{ g += '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#232b35"/><text class="ax" x="'+(padL-4)+'" y="'+(y(v)+3)+'" text-anchor="end">'+v.toFixed(tdec)+'</text>'; });
   const span = t1 - t0;
   if(span <= 6*3600e3){ for(let k=1;k<4;k++){ const tt=t0+span*k/4; g += '<text class="ax" x="'+x(tt)+'" y="'+(H-2)+'" text-anchor="middle">'+new Date(tt).toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'})+'</text>'; } }
-  else { const long = span > 8*864e5; const d0=new Date(t0); d0.setHours(24,0,0,0);
-    if(long){ while(d0.getDay()!==1) d0.setDate(d0.getDate()+1); }   // weekly ticks on Mondays
-    for(const dd=new Date(d0); dd.getTime()<t1; dd.setDate(dd.getDate()+(long?7:1))){ const d=dd.getTime(), xx=x(d); g += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/><text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString(LOC, long?{day:'numeric',month:'short'}:{weekday:'short'})+'</text>'; } }
+  else { const days = span/864e5, by = days > 60 ? 'month' : days > 8 ? 'week' : 'day'; const d0=new Date(t0); d0.setHours(24,0,0,0);
+    if(by==='week'){ while(d0.getDay()!==1) d0.setDate(d0.getDate()+1); }                       // weekly ticks on Mondays
+    if(by==='month'){ d0.setDate(1); if(d0.getTime() < t0) d0.setMonth(d0.getMonth()+1); }     // monthly ticks on the 1st
+    const fmt = by==='month' ? {month:'short'} : by==='week' ? {day:'numeric',month:'short'} : {weekday:'short'}; let lastX = -99;
+    for(const dd=new Date(d0); dd.getTime()<t1; by==='month' ? dd.setMonth(dd.getMonth()+1) : dd.setDate(dd.getDate()+(by==='week'?7:1))){ const d=dd.getTime(), xx=x(d);
+      g += '<line x1="'+xx+'" x2="'+xx+'" y1="'+padT+'" y2="'+(H-padB)+'" stroke="#1b222a"/>';
+      if(xx - lastX >= 44){ g += '<text class="ax" x="'+(xx+3)+'" y="'+(H-2)+'">'+new Date(d).toLocaleDateString(LOC, fmt)+'</text>'; lastX = xx; } } }
   const placed = [];
   (c.refs||[]).slice().sort((a,b)=>b.v-a.v).forEach(r=>{ const yy=y(Number(r.v)); if(yy<padT-1||yy>H-padB+1) return;
     // keep labels apart: if one is already close above, put this label below its line instead

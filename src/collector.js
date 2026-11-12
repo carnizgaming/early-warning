@@ -749,6 +749,8 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   // ---------- what's new (for notifications) ----------
   const seenFile = path.join(dataDir, 'seen.json');
   const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [], live = new Set();
+  // a reading (wind, tide, grid frequency, a count) is reworded on every refresh; that doesn't make it new, and it is always about home
+  const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary']);
   for (const i of items) {
     // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
     const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
@@ -756,6 +758,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     else i.isNew = ageHours(prev) < 1;
     for (const x of ids) { live.add(x); if (!seen[x]) seen[x] = prev || iso(now); }
     i.firstSeen = prev || iso(now); delete i.sameStory;
+    if (READING.has(i.tag)) { i.reading = true; if (i.level === 'info') i.isNew = false; }
   }
   // forget items that have gone; one still showing keeps its first-seen time, or it would turn NEW again every two weeks
   for (const k of Object.keys(seen)) if (!live.has(k) && ageHours(seen[k]) >= 24 * 14) delete seen[k];

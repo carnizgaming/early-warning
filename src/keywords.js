@@ -164,7 +164,9 @@ module.exports.matcher = kw => {
   const needs = Object.fromEntries(Object.entries(kw.needs || {}).map(([k, ws]) => [k, ws.map(wordRe)]));
   const best = t => { for (const [l, ks] of lists) { const hit = ks.find(([, r]) => r.test(t)); if (hit) return [l, hit[0]]; } return ['info', '']; };
   return (title, summary = '') => {
-    const t = ' ' + String(title).toLowerCase() + ' ', all = t + String(summary).toLowerCase() + ' ';
+    // "pre-pandemic levels" and "post-war Britain" are about a time, not an event
+    const low = s => String(s).toLowerCase().replace(/(?<![a-z])(pre|post)-(pandemic|war|invasion)\b/g, ' ');
+    const t = ' ' + low(title) + ' ', all = t + low(summary) + ' ';
     const inTitle = best(t), anywhere = best(all);
     let r = inTitle;
     if (anywhere[0] !== inTitle[0]) { const s = anywhere[0] === 'watch' ? anywhere : [DOWN[anywhere[0]], anywhere[1]]; if (r[0] === 'info' || ORDER.indexOf(s[0]) < ORDER.indexOf(r[0])) r = s; }
