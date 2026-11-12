@@ -303,17 +303,52 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     const local = (US ? /united states|\bUSA\b|\bU\.S\./i : /united kingdom|\bUK\b/i).test(e.title); if (local) lvl = maxLevel(lvl, 'warning');
     return lvl === 'info' ? null : newItem(f, e.title, e.link, e.time, e.summary, lvl, local, 'disaster');
   }).filter(Boolean);
-  H.usgs = async f => arr((await getJson(f.url)).features).map(q => {
-    const m = +q.properties.mag, tsu = q.properties.tsunami === 1;
-    let lvl = m >= 7.5 ? 'warning' : m >= 6.5 ? 'watch' : 'info'; if (tsu) lvl = maxLevel(lvl, 'watch');
-    return newItem(f, `M${m.toFixed(1)} earthquake, ${q.properties.place}`, q.properties.url, iso(q.properties.time), `Alert: ${q.properties.alert || 'none'}.${tsu ? ' Tsunami possible.' : ''}`, lvl, false, 'quake');
-  });
-  H.bgs = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14).map(e => {
-    const m = +((`${e.title} ${e.summary}`.match(/M(?:L)?\s*(\d+(?:\.\d)?)/i) || [])[1] || 0);
-    return newItem(f, 'UK quake: ' + e.title.replace(/^UK Earthquake alert\s*:\s*/i, ''), e.link, e.time, e.summary, m >= 4 ? 'warning' : m >= 3 ? 'watch' : 'info', isLocal(`${e.title} ${e.summary}`), 'quake');
-  });
-  H.fcdo = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 72).slice(0, 15).map(e =>
-    newItem(f, 'Travel advice: ' + e.title, e.link, e.time, e.summary, /against all travel|leave .* now|leave immediately|airspace|level 4|do not travel|ordered departure/i.test(`${e.title} ${e.summary}`) ? 'watch' : 'info', false, 'travel'));
+  // A few dozen M4.5+ quakes happen every day. List the ones that matter (M6+, a USGS damage alert, a tsunami flag) and count the rest.
+  H.usgs = async f => {
+    const out = [], small = [];
+    for (const q of arr((await getJson(f.url)).features)) {
+      const p = q.properties, m = +p.mag, tsu = p.tsunami === 1, al = String(p.alert || 'none');
+      let lvl = m >= 7.5 ? 'warning' : m >= 6.5 ? 'watch' : 'info'; if (tsu) lvl = maxLevel(lvl, 'watch');
+      if (al === 'red') lvl = maxLevel(lvl, 'warning'); else if (al === 'orange') lvl = maxLevel(lvl, 'watch');
+      if (lvl === 'info' && m < 6 && al !== 'yellow') { small.push({ m, place: p.place, t: p.time }); continue; }
+      out.push(newItem(f, 'M' + m.toFixed(1) + ' earthquake, ' + p.place, p.url, iso(p.time), 'Alert: ' + al + '.' + (tsu ? ' Tsunami possible.' : ''), lvl, false, 'quake'));
+    }
+    if (small.length) {
+      const big = small.reduce((a, b) => (b.m > a.m ? b : a));
+      out.push(newItem(f, small.length + ' smaller earthquake' + (small.length === 1 ? '' : 's') + ' worldwide in the last 24 hours (largest M' + big.m.toFixed(1) + ', ' + big.place + ')', f.link,
+        iso(Math.max(...small.map(s => s.t))), 'Magnitude 4.5 to 5.9 with no damage alert or tsunami flag. The full list is on the USGS map.', 'info', false, 'quake-summary'));
+    }
+    return out;
+  };
+  // UK quakes (BGS): tremors under magnitude 3 away from home are rarely even felt, so they share one row
+  H.bgs = async f => {
+    const out = [], small = [];
+    for (const e of (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14)) {
+      const text = e.title + ' ' + e.summary, m = +((text.match(/M(?:L)?\s*(\d+(?:\.\d)?)/i) || [])[1] || 0), local = isLocal(text);
+      if (m < 3 && !local) { small.push({ m, t: e.time, place: titleCase((e.title.match(/:\s*([^:]+?),\s*\w{3},\s*\d/) || [])[1] || '').replace(/,\s*/g, ', ') }); continue; }
+      out.push(newItem(f, 'UK quake: ' + e.title.replace(/^UK Earthquake alert\s*:\s*/i, ''), e.link, e.time, e.summary, m >= 4 ? 'warning' : m >= 3 ? 'watch' : 'info', local, 'quake'));
+    }
+    if (small.length) {
+      const big = small.reduce((a, b) => (b.m > a.m ? b : a));
+      out.push(newItem(f, small.length + ' small UK tremor' + (small.length === 1 ? '' : 's') + ' in the last 14 days (largest M' + big.m.toFixed(1) + (big.place ? ', ' + big.place : '') + ')', f.link,
+        small.map(s => s.t).sort().pop(), 'Under magnitude 3 and not near you. The full list is on the BGS site.', 'info', false, 'quake-summary'));
+    }
+    return out;
+  };
+  // Travel advice changes: the serious ones (against all travel, leave now) get a row each; routine edits share one
+  H.fcdo = async f => {
+    const out = [], routine = [];
+    for (const e of (await readFeed(f.url)).filter(e => ageHours(e.time) <= 72).slice(0, 15)) {
+      if (/against all travel|leave .* now|leave immediately|airspace|level 4|do not travel|ordered departure/i.test(e.title + ' ' + e.summary)) out.push(newItem(f, 'Travel advice: ' + e.title, e.link, e.time, e.summary, 'watch', false, 'travel'));
+      else routine.push(e);
+    }
+    if (routine.length) {
+      const names = routine.map(e => e.title.replace(/\s+-\s+.*$/, '').replace(/ travel advi[cs].*$/i, '').trim());
+      out.push(newItem(f, routine.length + ' routine travel advice update' + (routine.length === 1 ? '' : 's') + ' in the last 3 days', f.link, routine.map(e => e.time).sort().pop(),
+        names.slice(0, 10).join(', ') + (names.length > 10 ? ' and ' + (names.length - 10) + ' more' : '') + '.', 'info', false, 'travel-summary'));
+    }
+    return out;
+  };
   H.kp = async f => {
     const j = await getJson(f.url); const last = j[j.length - 1];
     const kp = Array.isArray(last) ? +last[1] : +last.Kp, tt = Array.isArray(last) ? last[0] : last.time_tag;

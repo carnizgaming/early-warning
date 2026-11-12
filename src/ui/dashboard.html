@@ -28,7 +28,11 @@ header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:cen
 .tools{margin-top:4px;display:flex;gap:6px;justify-content:flex-end}
 button{background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font:inherit;font-size:12px;cursor:pointer}
 button:hover{color:var(--text)} button.on{color:var(--ok);border-color:#24603f}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:10px;min-height:0}
+/* Panels sit in columns. layout() gives each panel its height: a quiet one takes only what it needs, busy ones share the rest. */
+.grid{display:flex;gap:10px;min-height:0;align-items:flex-start;overflow:auto}
+.grid.fit{align-items:stretch;overflow:hidden}
+.col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:10px}
+.grid.fit .col{min-height:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;border-top:3px solid var(--line)}
 .panel.l-watch{border-top-color:var(--watch)} .panel.l-warning{border-top-color:var(--warning)} .panel.l-critical{border-top-color:var(--critical)}
 .ph{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)}
@@ -80,8 +84,7 @@ header{grid-template-columns:auto auto 1fr auto !important}
 .pop .note{font-size:11.5px;color:var(--faint);border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .scale{display:grid;grid-template-columns:22px 1fr;gap:3px 8px;font-size:12px;color:var(--muted);margin:6px 0}
 .scale b{font-weight:800}
-@media (max-width:1300px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:none;overflow:auto}.panel{min-height:340px;max-height:520px}html,body{overflow:auto}}
-@media (min-width:1301px) and (max-height:900px){.grid{grid-template-rows:none;grid-auto-rows:minmax(300px,1fr);overflow:auto}}
+@media (max-width:1300px){html,body{overflow:auto}}
 
 @media (max-width:700px){
   .panel.expanded{inset:6px}
@@ -95,8 +98,7 @@ header{grid-template-columns:auto auto 1fr auto !important}
   .right{grid-column:1/-1;order:6;text-align:left;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
   .clock{font-size:20px}
   .tools{margin:0}
-  .grid{grid-template-columns:1fr !important;grid-template-rows:none !important;overflow:visible}
-  .panel{min-height:0;max-height:70vh}
+  .grid{overflow:visible}
   .ticker{position:sticky;bottom:0}
 }
 
@@ -192,7 +194,7 @@ function beep(times){
     }
   }catch(e){}
 }
-function showWaiting(){ document.getElementById('grid').innerHTML = '<div class="wait" style="grid-column:1/-1;grid-row:1/-1">Collecting the first set of feeds&hellip;<br><span style="font-size:14px">This takes up to a minute. It then refreshes by itself every few minutes.</span></div>'; }
+function showWaiting(){ document.getElementById('grid').innerHTML = '<div class="wait" style="flex:1">Collecting the first set of feeds&hellip;<br><span style="font-size:14px">This takes up to a minute. It then refreshes by itself every few minutes.</span></div>'; }
 async function load(){
   try { const d = await window.ew.getData(); if(d){ data = d; render(); } else if(!data) showWaiting(); } catch(e){ if(!data) showWaiting(); }
   tick();
@@ -270,7 +272,7 @@ function wirePowerChart(){
 
 // ---------- generic mini chart: chart = {title, unit, points:[[iso,v]...], refs:[{v,label}], future, min, max}
 function chartSize(exp, h){
-  const g = document.getElementById('grid'); const cols = (getComputedStyle(g).gridTemplateColumns||'').split(' ').filter(Boolean).length || 1;
+  const g = document.getElementById('grid'); const cols = ncols();
   const w = exp ? Math.min(window.innerWidth - 24, Math.round(window.innerWidth*0.88)) - 26 : Math.round((g.clientWidth - 10*(cols-1))/cols) - 26;
   return [Math.max(240, w), exp ? (h||200) : (h||84)];
 }
@@ -333,6 +335,27 @@ function wireCharts(){
     svg.addEventListener('mouseleave',out); svg.addEventListener('touchend',()=>setTimeout(out,1500));
   });
 }
+// How many columns of panels fit, and how tall each panel is.
+function ncols(){ const w = window.innerWidth; return w <= 700 ? 1 : w <= 1300 ? 2 : 4; }
+function layout(){
+  const g = document.getElementById('grid'), n = ncols(), fit = n === 4 && window.innerHeight > 900;   // fit: everything on one screen, no page scroll
+  g.classList.toggle('fit', fit);
+  const cap = n === 1 ? Math.round(window.innerHeight * 0.7) : n === 2 ? 520 : 440;
+  g.querySelectorAll('.col').forEach(col=>{
+    const ps = [...col.querySelectorAll('.panel:not(.expanded)')];
+    const need = ps.map(p=>p.querySelector('.ph').offsetHeight + p.querySelector('.li').offsetHeight + 12);   // header + rows + padding and borders
+    if(!fit){ ps.forEach((p,i)=>{ p.style.flex = '0 0 auto'; p.style.height = Math.min(need[i], cap) + 'px'; }); return; }
+    // a panel that needs less than an equal share keeps its own height; the others share what is left
+    let avail = col.clientHeight - 10 * (ps.length - 1), left = ps.map((_,i)=>i); const h = [];
+    for(;;){ const share = avail / left.length, small = left.filter(i=>need[i] <= share);
+      if(!small.length || small.length === left.length) break;
+      small.forEach(i=>{ h[i] = need[i]; avail -= need[i]; }); left = left.filter(i=>!small.includes(i)); }
+    left.forEach(i=>{ h[i] = avail / left.length; });
+    ps.forEach((p,i)=>{ p.style.flex = '0 0 ' + Math.floor(h[i]) + 'px'; p.style.height = ''; });
+  });
+}
+// the header can change height (a second line of reasons, the "updated" line), which changes the room the panels have
+new ResizeObserver(()=>{ if(data && document.querySelector('#grid .col')) layout(); }).observe(document.getElementById('grid'));
 let expanded = null, rsz = null;
 window.addEventListener('resize', ()=>{ clearTimeout(rsz); rsz = setTimeout(()=>{ if(data) render(); }, 250); });
 function setExpanded(id){ expanded = id; if(data) render(); }
@@ -344,6 +367,7 @@ document.addEventListener('click', e=>{
 function render(){
   const d = data, items = d.items || [];
   LOC = d.nation==='US' ? 'en-US' : 'en-GB';
+  tick();   // fill the clock and "updated" lines first: they set the header's height, and the panels are sized to what is left
   const PANELS = panelsFor(d);
   // header
   const st = document.getElementById('status');
@@ -358,7 +382,7 @@ function render(){
   items.filter(i=>i.level==='critical').forEach(i=>seenCritical.add(i.id));
   lastOverall = d.overall;
   // panels
-  const grid = document.getElementById('grid'); let html = ''; const background = [];
+  const grid = document.getElementById('grid'), parts = [], background = [];
   for(const p of PANELS){
     let list = items.filter(i=>i.panel===p.id);
     if(p.id==='news' && !newsAll) list = list.filter(i=>i.level!=='info');
@@ -384,18 +408,23 @@ function render(){
     else body += '<div class="empty '+(failed.length===srcs.length && srcs.length?'':'ok')+'">'+(failed.length===srcs.length && srcs.length ? 'Feed not responding.' : esc(p.okText))+'</div>';
     if(failed.length && list.length) body += '<div class="empty">Not responding: '+failed.map(s=>esc(s.name)).join(', ')+'</div>';
     srcs.filter(s=>s.ok===null).forEach(s=>{ body += '<a class="empty" style="display:block" href="'+esc(s.link)+'" target="_blank">&#8599; '+esc(s.name)+': open to check</a>'; });
-    html += '<section class="panel l-'+top+(isExp?' expanded':'')+'" data-panel="'+p.id+'"><div class="ph"><h2 data-expand="'+p.id+'" title="Click to '+(isExp?'close':'expand')+'">'+esc(p.title)+'</h2><span class="srcs">'+dots+'</span>'+badge+'<button class="exp" data-expand="'+p.id+'" title="'+(isExp?'Close (Esc)':'Expand')+'" aria-label="'+(isExp?'Close':'Expand')+'">'+(isExp?'&times;':'&#x2922;')+'</button></div><div class="list">'+body+'</div></section>';
+    parts.push('<section class="panel l-'+top+(isExp?' expanded':'')+'" data-panel="'+p.id+'"><div class="ph"><h2 data-expand="'+p.id+'" title="Click to '+(isExp?'close':'expand')+'">'+esc(p.title)+'</h2><span class="srcs">'+dots+'</span>'+badge+'<button class="exp" data-expand="'+p.id+'" title="'+(isExp?'Close (Esc)':'Expand')+'" aria-label="'+(isExp?'Close':'Expand')+'">'+(isExp?'&times;':'&#x2922;')+'</button></div><div class="list"><div class="li">'+body+'</div></div></section>');
   }
   // header line: why the status is what it is. Flagged world items don't raise the status, so say where they are.
   const where = esc(d.home) + ((d.region || (d.nation!=='US' && d.country)) ? ', ' + esc(d.region || d.country) : '') + (d.nation==='US' ? ', the US' : ', the UK') + ' and the world';
   document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
     ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
     : '<b>Nothing needs your attention.</b> Watching ' + where + '.' + (d.overall==='info' && background.length ? ' Flagged for background: ' + background.join(', ') + '.' : '');
-  const scrolls = [...grid.querySelectorAll('.list')].map(l=>l.scrollTop);
+  // panels go into columns left to right, so the reading order stays the same at any width
+  const scrolls = {}, gridTop = grid.scrollTop; grid.querySelectorAll('.panel').forEach(p=>{ scrolls[p.dataset.panel] = p.querySelector('.list').scrollTop; });
+  const n = ncols(); let html = '';
+  for(let c=0;c<n;c++) html += '<div class="col">' + parts.filter((_,k)=>k%n===c).join('') + '</div>';
   grid.innerHTML = html;
+  layout();
   wirePowerChart(); wireCharts();
   document.getElementById('backdrop').classList.toggle('on', !!expanded);
-  [...grid.querySelectorAll('.list')].forEach((l,i)=>l.scrollTop = scrolls[i]||0);
+  grid.querySelectorAll('.panel').forEach(p=>{ p.querySelector('.list').scrollTop = scrolls[p.dataset.panel]||0; });
+  grid.scrollTop = gridTop;
   // ticker
   const heads = items.filter(i=>i.panel==='news').sort((a,b)=>new Date(b.time||0)-new Date(a.time||0)).slice(0,25);
   const tk = heads.map(i=>'<span><b>'+esc(i.source)+'</b>'+esc(i.title)+'</span>').join('');
