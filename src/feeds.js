@@ -59,11 +59,11 @@ function buildUK(s, add) {
   if ((h.roads || []).length) add({ id: 'roads-news', panel: 'local', name: 'Roads news: ' + h.roads.slice(0, 3).join(', '), kind: 'news', everyMinutes: 20, url: gn(`(${orq(h.roads)}) (closed OR crash OR closure OR delays) when:2d`), link: 'https://nationalhighways.co.uk/travel-updates/' });
   if (h.paperRss) add({ id: 'paper', panel: 'local', name: h.paperName || 'Local paper', kind: 'news', url: h.paperRss, link: h.paperRss });
   add({ id: 'local-news', panel: 'local', name: `Local news (${localTerms.slice(0, 3).join(', ')})`, kind: 'news', everyMinutes: 20, url: gn(`(${orq(localTerms)}) when:3d`), link: 'https://news.google.com/' });
-  // ---- news flashpoints
-  add({ id: 'bbc-uk', panel: 'news', name: 'BBC UK', kind: 'news', url: 'https://feeds.bbci.co.uk/news/uk/rss.xml', link: 'https://www.bbc.co.uk/news/uk' });
+  // ---- news flashpoints (home: true marks home-country news, where a serious headline raises the status)
+  add({ id: 'bbc-uk', panel: 'news', name: 'BBC UK', kind: 'news', home: true, url: 'https://feeds.bbci.co.uk/news/uk/rss.xml', link: 'https://www.bbc.co.uk/news/uk' });
   add({ id: 'bbc-world', panel: 'news', name: 'BBC World', kind: 'news', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', link: 'https://www.bbc.co.uk/news/world' });
   const nation = { Wales: 'wales', Scotland: 'scotland', 'Northern Ireland': 'northern_ireland' }[h.country];
-  if (nation) add({ id: 'bbc-nation', panel: 'news', name: `BBC ${h.country}`, kind: 'news', url: `https://feeds.bbci.co.uk/news/${nation}/rss.xml`, link: `https://www.bbc.co.uk/news/${nation}` });
+  if (nation) add({ id: 'bbc-nation', panel: 'news', name: `BBC ${h.country}`, kind: 'news', home: true, url: `https://feeds.bbci.co.uk/news/${nation}/rss.xml`, link: `https://www.bbc.co.uk/news/${nation}` });
   add({ id: 'guardian-world', panel: 'news', name: 'Guardian World', kind: 'news', url: 'https://www.theguardian.com/world/rss', link: 'https://www.theguardian.com/world' });
   add({ id: 'aljazeera', panel: 'news', name: 'Al Jazeera', kind: 'news', url: 'https://www.aljazeera.com/xml/rss/all.xml', link: 'https://www.aljazeera.com/' });
   // ---- world
@@ -121,7 +121,7 @@ function buildUS(s, add) {
   add({ id: 'npr', panel: 'news', name: 'NPR News', kind: 'news', url: 'https://feeds.npr.org/1001/rss.xml', link: 'https://www.npr.org/sections/news/' });
   add({ id: 'npr-world', panel: 'news', name: 'NPR World', kind: 'news', url: 'https://feeds.npr.org/1004/rss.xml', link: 'https://www.npr.org/sections/world/' });
   add({ id: 'cbs', panel: 'news', name: 'CBS News', kind: 'news', url: 'https://www.cbsnews.com/latest/rss/main', link: 'https://www.cbsnews.com/' });
-  add({ id: 'guardian-us', panel: 'news', name: 'Guardian US', kind: 'news', url: 'https://www.theguardian.com/us-news/rss', link: 'https://www.theguardian.com/us-news' });
+  add({ id: 'guardian-us', panel: 'news', name: 'Guardian US', kind: 'news', home: true, url: 'https://www.theguardian.com/us-news/rss', link: 'https://www.theguardian.com/us-news' });
   add({ id: 'bbc-world', panel: 'news', name: 'BBC World', kind: 'news', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', link: 'https://www.bbc.co.uk/news/world' });
   add({ id: 'aljazeera', panel: 'news', name: 'Al Jazeera', kind: 'news', url: 'https://www.aljazeera.com/xml/rss/all.xml', link: 'https://www.aljazeera.com/' });
   // ---- world

@@ -294,7 +294,8 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
       if (f.nearOnly && !isLocal(text) && !(home.state && text.includes(home.state))) continue;
       const it = newItem(f, title, e.link, e.time, sum, k[0], isLocal(text), k[1]);
       const outlet = txt(e.raw && e.raw.source).trim().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''); if (outlet) it.outlet = outlet;   // news searches name the outlet of each result
-      it.isNews = true; out.push(it);
+      it.isNews = true; if (f.home || ['local', 'power', 'energy'].includes(f.panel)) it.home = true;   // news about here, not the world
+      out.push(it);
     }
     return out;
   };
@@ -688,13 +689,15 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
 
   // The status is for things that need attention here and now. A watch counts when it is near you, or comes from an official
   // or measured source for your area. Flagged world news, shipping, cyber, health and space items stay in their panels (and
-  // feed the tension level) without holding the status at WATCH. Anything rated warning or above still counts, wherever it is.
+  // feed the tension level) without holding the status at WATCH. A serious headline counts when it is local or from a
+  // home-country feed; an airstrike abroad is what the tension level is for. Critical headlines count wherever they are.
   let overall = 'info'; const why = [];
   const HERE = ['official', 'weather', 'floods', 'power'];
   for (const i of items) {
     let l = i.level;
     if ((i.isNews || ['world', 'space', 'cyber', 'health', 'money'].includes(i.panel)) && l === 'warning' && !i.local) l = 'watch';
     if (i.isNews && RANK[l] > RANK.warning) l = 'warning';
+    if (i.isNews && i.level === 'warning' && !i.local && !i.home) l = 'info';
     if (i.level === 'watch' && !(i.local || HERE.includes(i.panel) || (!i.isNews && ['energy', 'local'].includes(i.panel)))) l = 'info';
     if (l !== 'info') why.push([l, i.title]);
     overall = maxLevel(overall, l);
