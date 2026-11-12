@@ -617,12 +617,33 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   }
 
   // ---------- overall status ----------
-  let overall = 'info', reasons = [];
+  // The terrorism threat level sits at the same value for months or years. It is flagged for a week after it changes and
+  // is then shown in grey, so a long-standing level doesn't hold the status at WATCH for ever.
+  const stFile = path.join(dataDir, 'standing.json'), st = readJson(stFile, {});
+  const threatFeeds = [...new Set(items.filter(i => i.tag === 'threat').map(i => i.feed))];
+  for (const id of threatFeeds) {
+    const mine = items.filter(i => i.tag === 'threat' && i.feed === id), sig = mine.map(i => i.title).sort().join(' | ');
+    if (!st[id]) st[id] = { sig, since: null };                       // first run: no way to tell when it last changed
+    else if (st[id].sig !== sig) st[id] = { sig, since: iso(now) };
+    for (const i of mine) {
+      const since = st[id].since || i.time;
+      if (since && ageHours(since) <= 24 * 7) i.changed = since;
+      else if (i.level === 'watch') { i.level = 'info'; i.standing = true; }
+    }
+  }
+  if (threatFeeds.length) writeJson(stFile, st);
+
+  // The status is for things that need attention here and now. A watch counts when it is near you, or comes from an official
+  // or measured source for your area. Flagged world news, shipping, cyber, health and space items stay in their panels (and
+  // feed the tension level) without holding the status at WATCH. Anything rated warning or above still counts, wherever it is.
+  let overall = 'info'; const why = [];
+  const HERE = ['official', 'weather', 'floods', 'power'];
   for (const i of items) {
     let l = i.level;
     if ((i.isNews || ['world', 'space', 'cyber', 'health', 'money'].includes(i.panel)) && l === 'warning' && !i.local) l = 'watch';
     if (i.isNews && RANK[l] > RANK.warning) l = 'warning';
-    if (RANK[l] >= RANK.warning) reasons.push(i.title);
+    if (i.level === 'watch' && !(i.local || HERE.includes(i.panel) || (!i.isNews && ['energy', 'local'].includes(i.panel)))) l = 'info';
+    if (l !== 'info') why.push([l, i.title]);
     overall = maxLevel(overall, l);
   }
 
@@ -667,27 +688,30 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const tension = { level: lv, name: NAMES[lv], score, meaning: MEAN[lv], factors, trend: Object.keys(byH).sort().map(k => byH[k]), learning: older.length < 48 };
   if (lv <= 2) {
     items.push(newItem({ id: `tension-${lv}-${iso(now).slice(0, 10)}`, name: 'World tension level', panel: 'tension' }, `World tension level ${lv} (${NAMES[lv]})`, '', iso(now), MEAN[lv], lv === 1 ? 'critical' : 'warning', false, 'tension'));
-    overall = maxLevel(overall, lv === 1 ? 'critical' : 'warning'); reasons.push(`World tension level ${lv} (${NAMES[lv]})`);
-  } else if (lv === 3) overall = maxLevel(overall, 'watch');
+    overall = maxLevel(overall, lv === 1 ? 'critical' : 'warning'); why.push([lv === 1 ? 'critical' : 'warning', `World tension level ${lv} (${NAMES[lv]})`]);
+  } else if (lv === 3) { overall = maxLevel(overall, 'watch'); why.push(['watch', `World tension level 3 (${NAMES[3]})`]); }
+  // the most serious reasons first
+  const reasons = [...new Set(why.sort((a, b) => RANK[b[0]] - RANK[a[0]]).map(x => x[1]))].slice(0, 6);
 
   // ---------- what's new (for notifications) ----------
   const seenFile = path.join(dataDir, 'seen.json');
-  const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [];
+  const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [], live = new Set();
   for (const i of items) {
     // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
     const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
     if (!prev) { i.isNew = true; if (RANK[i.level] >= RANK.warning && (!i.isNews || i.local || i.level === 'critical')) fresh.push(i); }
     else i.isNew = ageHours(prev) < 1;
-    for (const x of ids) if (!seen[x]) seen[x] = prev || iso(now);
+    for (const x of ids) { live.add(x); if (!seen[x]) seen[x] = prev || iso(now); }
     i.firstSeen = prev || iso(now); delete i.sameStory;
   }
-  for (const k of Object.keys(seen)) if (ageHours(seen[k]) >= 24 * 14) delete seen[k];
+  // forget items that have gone; one still showing keeps its first-seen time, or it would turn NEW again every two weeks
+  for (const k of Object.keys(seen)) if (!live.has(k) && ageHours(seen[k]) >= 24 * 14) delete seen[k];
   writeJson(seenFile, seen);
 
   const okN = sources.filter(s => s.ok === true).length, allN = sources.filter(s => s.ok !== null).length;
   log(`OK ${items.length} items from ${okN}/${allN} feeds, overall ${overall}, ${fresh.length} new serious`);
   return {
-    data: { generated: iso(now), refreshMinutes: settings.refreshMinutes || 5, home: home.name, nation: US ? 'US' : 'GB', region: home.region || '', country: home.country || '', overall, reasons: [...new Set(reasons)].slice(0, 6), tension, power, charts, sources, items },
+    data: { generated: iso(now), refreshMinutes: settings.refreshMinutes || 5, home: home.name, nation: US ? 'US' : 'GB', region: home.region || '', country: home.country || '', overall, reasons, tension, power, charts, sources, items },
     fresh: firstRun ? [] : fresh
   };
 }

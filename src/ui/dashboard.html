@@ -203,6 +203,8 @@ function itemHtml(i){
   if(i.local) meta.push('<span class="tag-local">NEAR YOU</span>');
   if(i.isNew) meta.push('<span class="tag-new">NEW</span>');
   meta.push(esc(i.source));
+  if(i.standing) meta.push('no recent change');
+  if(i.changed) meta.push('changed '+esc(ago(i.changed)));
   // the same story from other outlets (merged by the collector); the whole row is one link, so these are names with their headlines on hover
   if(i.also && i.also.length){ const others = [...new Set(i.also.map(a=>a.source).filter(s=>s!==i.source))];
     if(others.length) meta.push('<span class="also" title="'+esc(i.also.map(a=>a.source+': '+a.title).join('\n'))+'">also '+esc(others.join(', '))+'</span>'); }
@@ -347,9 +349,6 @@ function render(){
   const st = document.getElementById('status');
   st.className = 'status s-' + d.overall;
   document.getElementById('statusText').textContent = LABEL[d.overall] || d.overall;
-  document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
-    ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
-    : 'Nothing serious in any feed. Feeds for ' + esc(d.home) + ((d.region || (d.nation!=='US' && d.country)) ? ', ' + esc(d.region || d.country) : '') + (d.nation==='US' ? ', the US' : ', the UK') + ' and the world.';
   renderTension(d.tension);
   // sound
   if(soundOn){
@@ -359,7 +358,7 @@ function render(){
   items.filter(i=>i.level==='critical').forEach(i=>seenCritical.add(i.id));
   lastOverall = d.overall;
   // panels
-  const grid = document.getElementById('grid'); let html = '';
+  const grid = document.getElementById('grid'); let html = ''; const background = [];
   for(const p of PANELS){
     let list = items.filter(i=>i.panel===p.id);
     if(p.id==='news' && !newsAll) list = list.filter(i=>i.level!=='info');
@@ -370,6 +369,7 @@ function render(){
     const srcs = (d.sources||[]).filter(s=>s.panel===p.id);
     const dots = srcs.map(s=>'<a href="'+esc(s.link)+'" target="_blank" class="src '+(s.ok===false?'bad':s.ok===null?'link':'')+'" title="'+esc(s.name)+(s.ok===false?' - NOT RESPONDING: '+esc(s.error):s.ok===null?' - '+esc(s.error):' - OK, '+s.count+' items')+'"></a>').join('');
     const flagged = list.filter(i=>i.level!=='info').length;
+    if(flagged) background.push(esc(p.title.replace(/ \(news\)$/,''))+' ('+flagged+')');
     const badge = flagged ? '<span class="badge l-'+top+'">'+flagged+'</span>' : '<span class="badge">'+list.length+'</span>';
     let body = '';
     const isExp = expanded===p.id;
@@ -386,6 +386,11 @@ function render(){
     srcs.filter(s=>s.ok===null).forEach(s=>{ body += '<a class="empty" style="display:block" href="'+esc(s.link)+'" target="_blank">&#8599; '+esc(s.name)+': open to check</a>'; });
     html += '<section class="panel l-'+top+(isExp?' expanded':'')+'" data-panel="'+p.id+'"><div class="ph"><h2 data-expand="'+p.id+'" title="Click to '+(isExp?'close':'expand')+'">'+esc(p.title)+'</h2><span class="srcs">'+dots+'</span>'+badge+'<button class="exp" data-expand="'+p.id+'" title="'+(isExp?'Close (Esc)':'Expand')+'" aria-label="'+(isExp?'Close':'Expand')+'">'+(isExp?'&times;':'&#x2922;')+'</button></div><div class="list">'+body+'</div></section>';
   }
+  // header line: why the status is what it is. Flagged world items don't raise the status, so say where they are.
+  const where = esc(d.home) + ((d.region || (d.nation!=='US' && d.country)) ? ', ' + esc(d.region || d.country) : '') + (d.nation==='US' ? ', the US' : ', the UK') + ' and the world';
+  document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
+    ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
+    : '<b>Nothing needs your attention.</b> Watching ' + where + '.' + (d.overall==='info' && background.length ? ' Flagged for background: ' + background.join(', ') + '.' : '');
   const scrolls = [...grid.querySelectorAll('.list')].map(l=>l.scrollTop);
   grid.innerHTML = html;
   wirePowerChart(); wireCharts();
