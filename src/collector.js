@@ -633,13 +633,34 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   // The most serious copy (then the first by feed order) leads; the rest become "also" on it.
   const newsRaw = items.filter(i => i.panel === 'news');
   const STOP = new Set('the and for with from after over says said amid into about than that this what when where which while will would could has have had not but are was were been its their they them his her him how why who new more most just still into onto out off top up down day week year years live latest update updates news report reports watch inside analysis explainer opinion'.split(' '));
-  const keyWords = t => new Set(t.toLowerCase().replace(/['’]s\b/g, '').replace(/(\w)-(\w)/g, '$1$2').replace(/[^a-z0-9]+/g, ' ').split(' ')
-    .filter(w => w.length >= 3 && !STOP.has(w)).map(w => w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w));
+  // Outlets also use different forms of the same word for one event ("Israeli air strike kills surgeon" / "Gaza doctor killed
+  // as Israel..."), so fold those together first: a people to its country, and the usual words for a strike, a death and medics.
+  const FOLD = { israeli: 'israel', iranian: 'iran', russian: 'russia', ukrainian: 'ukraine', chinese: 'china', palestinian: 'palestine',
+    syrian: 'syria', lebanese: 'lebanon', yemeni: 'yemen', iraqi: 'iraq', turkish: 'turkey', taiwanese: 'taiwan', korean: 'korea',
+    indian: 'india', pakistani: 'pakistan', afghan: 'afghanistan', sudanese: 'sudan', venezuelan: 'venezuela', colombian: 'colombia',
+    american: 'america', british: 'britain', french: 'france', german: 'germany', polish: 'poland',
+    airstrike: 'strike', struck: 'strike', bomb: 'strike', bombing: 'strike', shelled: 'strike', shelling: 'strike',
+    dead: 'kill', death: 'kill', die: 'kill', dies: 'kill', died: 'kill', deadly: 'kill', fatal: 'kill',
+    surgeon: 'doctor', medic: 'doctor', healthcare: 'hospital', clinic: 'hospital' };
+  const fold = w => {
+    let s = w;
+    if (!FOLD[s] && s.length > 4 && !s.endsWith('ss')) { const e = ['ing', 'ed', 'es', 's'].find(e => s.endsWith(e) && s.length - e.length >= 3); if (e) s = s.slice(0, -e.length); }
+    s = FOLD[s] || FOLD[s + 'e'] || s;                               // "deaths" -> "death", "airstrikes" -> "airstrik" + "e"
+    return s.length > 4 && s.endsWith('e') ? s.slice(0, -1) : s;     // "strike" and "strik(es)", "seize" and "seiz(ed)"
+  };
+  const keyWords = t => new Set(t.toLowerCase().replace(/['’]s\b/g, '').replace(/\bair strike/g, 'airstrike').replace(/(\w)-(\w)/g, '$1$2').replace(/[^a-z0-9]+/g, ' ').split(' ')
+    .filter(w => w.length >= 3 && !STOP.has(w)).map(fold));
   // names (capitalised words) stop "39 die as boat sinks off Senegal" matching "13 die as boat sinks off Crete":
   // if both titles name things, they must share at least one
-  const names = t => new Set((t.match(/\b[A-Z][a-zA-Z]+/g) || []).map(w => w.toLowerCase()).filter(w => w.length >= 3 && !STOP.has(w)));
+  const names = t => new Set((t.match(/\b[A-Z][a-zA-Z]+/g) || []).map(w => w.toLowerCase()).filter(w => w.length >= 3 && !STOP.has(w)).map(fold));
   const share = (a, b) => { let n = 0; for (const w of a) if (b.has(w)) n++; return n; };
-  const sameStory = (a, b, min, part) => { const n = share(a.w, b.w); return n >= min && n / Math.min(a.w.size, b.w.size) >= part && (!a.n.size || !b.n.size || share(a.n, b.n) > 0); };
+  // What happened (a strike, deaths) is worded the same in every such story, so "Russian drone strike on Odesa kills three" and
+  // "...on Kyiv kills five" share plenty: at least two of the shared words must say where, who or how many.
+  const EVENT = new Set(['strike', 'kill', 'attack', 'drone', 'missile', 'wounded', 'injured'].map(fold));
+  const sameStory = (a, b, min, part) => {
+    const sh = [...a.w].filter(w => b.w.has(w)), n = sh.length;
+    return n >= min && n / Math.min(a.w.size, b.w.size) >= part && sh.filter(w => !EVENT.has(w)).length >= 2 && (!a.n.size || !b.n.size || share(a.n, b.n) > 0);
+  };
   const mergeStories = (list, min, part) => {
     const stories = [];
     for (const i of [...list].sort((a, b) => RANK[b.level] - RANK[a.level])) {   // stable sort keeps feed order within a level
