@@ -12,6 +12,8 @@ const MET_REGIONS = {
 };
 
 const isUS = h => (h && h.nation) === 'US';
+// Shipping news names Iran or the Red Sea in most headlines. A watch there needs one of these in the headline as well.
+const INCIDENT = /attack|struck|\bhit\b|\bhits\b|explo|blast|seiz|hijack|boarded|missile|drone|projectile|\bmines?\b|\bfire\b|sunk|sinks|sank|detain|closed|closure|blockade|blocked/i;
 
 function buildFeeds(s) {
   const F = [];
@@ -50,7 +52,7 @@ function buildUK(s, add) {
   // ---- grid & gas
   add({ id: 'freq', panel: 'energy', name: 'Grid frequency (Elexon)', kind: 'freq', url: 'https://data.elexon.co.uk/bmrs/api/v1/datasets/FREQ?measurementDateTimeFrom={minus60m}&measurementDateTimeTo={now}&format=json', link: 'https://bmrs.elexon.co.uk/rolling-system-frequency' });
   add({ id: 'syswarn', panel: 'energy', name: 'Grid warnings (Elexon)', kind: 'syswarn', everyMinutes: 10, url: 'https://data.elexon.co.uk/bmrs/api/v1/system/warnings?publishDateTimeFrom={minus3d}&publishDateTimeTo={now}&format=json', link: 'https://bmrs.elexon.co.uk/events' });
-  add({ id: 'gas-news', panel: 'energy', name: 'Gas supply news', kind: 'news', everyMinutes: 30, url: gn('("gas margins notice" OR "gas supply" OR "gas shortage" OR "National Gas" OR "energy rationing") UK when:7d'), link: 'https://www.nationalgas.com/our-businesses/margins-notice-gas-balancing-notification' });
+  add({ id: 'gas-news', panel: 'energy', name: 'Gas supply news', kind: 'news', everyMinutes: 30, skip: /\bschools?\b|nursery|college|leisure centre|roadworks/i, url: gn('("gas margins notice" OR "gas supply" OR "gas shortage" OR "National Gas" OR "energy rationing") UK when:7d'), link: 'https://www.nationalgas.com/our-businesses/margins-notice-gas-balancing-notification' });
   // ---- local & roads
   if (h.country === 'Wales' && (h.roads || []).length) add({ id: 'traffic', panel: 'local', name: 'Traffic Wales live alerts', kind: 'traffic', everyMinutes: 10, url: 'https://traffic.wales/road-traffic-alerts', link: 'https://traffic.wales/road-traffic-alerts' });
   else if ((h.roads || []).length) add({ id: 'traffic-link', panel: 'local', name: 'Road incidents (National Highways / Traffic Scotland)', kind: 'link', link: h.country === 'Scotland' ? 'https://trafficscotland.org/currentincidents/' : 'https://nationalhighways.co.uk/travel-updates/' });
@@ -69,11 +71,11 @@ function buildUK(s, add) {
   add({ id: 'fcdo', panel: 'world', name: 'FCDO travel advice changes', kind: 'fcdo', url: 'https://www.gov.uk/foreign-travel-advice.atom', link: 'https://www.gov.uk/foreign-travel-advice' });
   // ---- health & food
   add({ id: 'ukhsa', panel: 'health', name: 'UK Health Security Agency news', kind: 'agency', everyMinutes: 60, url: 'https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=uk-health-security-agency', link: 'https://www.gov.uk/government/organisations/uk-health-security-agency' });
-  add({ id: 'ukhsa-weekly', panel: 'health', name: 'UKHSA outbreaks under monitoring (weekly)', kind: 'agency', match: 'outbreaks under monitoring', everyMinutes: 180, url: 'https://www.gov.uk/search/research-and-statistics.atom?keywords=outbreaks+under+monitoring&organisations%5B%5D=uk-health-security-agency', link: 'https://www.gov.uk/government/publications/outbreaks-under-monitoring-in-2026' });
+  add({ id: 'ukhsa-weekly', panel: 'health', name: 'UKHSA outbreaks under monitoring (weekly)', kind: 'agency', routine: true, match: 'outbreaks under monitoring', everyMinutes: 180, url: 'https://www.gov.uk/search/research-and-statistics.atom?keywords=outbreaks+under+monitoring&organisations%5B%5D=uk-health-security-agency', link: 'https://www.gov.uk/government/publications/outbreaks-under-monitoring-in-2026' });
   add({ id: 'fsa', panel: 'health', name: 'Food Standards Agency alerts', kind: 'fsa', everyMinutes: 60, url: 'https://data.food.gov.uk/food-alerts/id?_limit=15&_sort=-created', link: 'https://www.food.gov.uk/news-alerts/search/alerts' });
   // ---- money & shipping
   add({ id: 'fx', panel: 'money', name: 'Pound exchange rates (Frankfurter / ECB)', kind: 'fx', base: 'GBP', everyMinutes: 120, url: 'https://api.frankfurter.dev/v1/{date40}..{today}?from=GBP&to=USD,EUR', link: 'https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html' });
-  add({ id: 'shipping-news', panel: 'money', name: 'Gulf and Red Sea shipping news (UKMTO)', kind: 'news', everyMinutes: 20, url: gn('(UKMTO OR "Strait of Hormuz" OR "Red Sea") (tanker OR vessel OR shipping) when:3d'), link: 'https://www.ukmto.org/' });
+  add({ id: 'shipping-news', panel: 'money', name: 'Gulf and Red Sea shipping news (UKMTO)', kind: 'news', everyMinutes: 20, incident: INCIDENT, url: gn('(UKMTO OR "Strait of Hormuz" OR "Red Sea") (tanker OR vessel OR shipping) when:3d'), link: 'https://www.ukmto.org/' });
   // ---- cyber
   add({ id: 'ncsc', panel: 'cyber', name: 'NCSC (UK cyber security)', kind: 'advisory', url: 'https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml', link: 'https://www.ncsc.gov.uk/' });
   add({ id: 'ioda', panel: 'cyber', name: 'UK internet outages (IODA)', kind: 'ioda', country: 'UK', everyMinutes: 15, url: 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/alerts?entityType=country&entityCode=GB&from={unixMinus1d}&until={unixNow}', link: 'https://ioda.inetintel.cc.gatech.edu/country/GB' });
@@ -130,7 +132,7 @@ function buildUS(s, add) {
   add({ id: 'fda', panel: 'health', name: 'FDA food recalls', kind: 'recall', everyMinutes: 60, url: 'https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/food-safety-recalls/rss.xml', link: 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts' });
   // ---- money & shipping
   add({ id: 'fx', panel: 'money', name: 'Dollar exchange rates (Frankfurter / ECB)', kind: 'fx', base: 'USD', everyMinutes: 120, url: 'https://api.frankfurter.dev/v1/{date40}..{today}?from=USD&to=EUR,GBP', link: 'https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html' });
-  add({ id: 'shipping-news', panel: 'money', name: 'Shipping chokepoint news (Hormuz, Red Sea, Panama Canal)', kind: 'news', everyMinutes: 20, url: gn('("Strait of Hormuz" OR "Red Sea" OR "Panama Canal") (tanker OR vessel OR shipping) when:3d'), link: 'https://www.maritime.dot.gov/msci-advisories' });
+  add({ id: 'shipping-news', panel: 'money', name: 'Shipping chokepoint news (Hormuz, Red Sea, Panama Canal)', kind: 'news', everyMinutes: 20, incident: INCIDENT, url: gn('("Strait of Hormuz" OR "Red Sea" OR "Panama Canal") (tanker OR vessel OR shipping) when:3d'), link: 'https://www.maritime.dot.gov/msci-advisories' });
   // ---- cyber
   add({ id: 'cisa', panel: 'cyber', name: 'CISA cyber alerts', kind: 'advisory', skip: /known exploited vulnerabilit/i, url: 'https://www.cisa.gov/cybersecurity-advisories/alerts.xml', link: 'https://www.cisa.gov/news-events/cybersecurity-advisories' });
   add({ id: 'ioda', panel: 'cyber', name: 'US internet outages (IODA)', kind: 'ioda', country: 'US', everyMinutes: 15, url: 'https://api.ioda.inetintel.cc.gatech.edu/v2/outages/alerts?entityType=country&entityCode=US&from={unixMinus1d}&until={unixNow}', link: 'https://ioda.inetintel.cc.gatech.edu/country/US' });

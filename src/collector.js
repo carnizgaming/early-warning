@@ -284,10 +284,15 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     for (const e of await readFeed(f.url)) {
       if (ageHours(e.time) > 48) continue;
       if (out.length >= 40) break;
-      const text = `${e.title} ${e.summary}`, k = keywordLevel(e.title, e.summary);
+      // a news search repeats the headline as its summary and adds the outlet's name ("... Iran International"),
+      // which must not count as a keyword
+      const title = e.title.replace(/\s+-\s+[^-]{2,40}$/, ''), sum = e.summary.toLowerCase().startsWith(title.toLowerCase().slice(0, 40)) ? '' : e.summary;
+      const text = `${e.title} ${sum}`; let k = keywordLevel(title, sum);
+      // a topic search (shipping lanes) names its flashpoint countries in most headlines: there a watch needs an incident word too
+      if (f.incident && k[0] === 'watch' && !f.incident.test(title)) k = ['info', ''];
       if ((f.must && !f.must.test(text)) || (f.skip && f.skip.test(text))) continue;   // news searches match loosely
       if (f.nearOnly && !isLocal(text) && !(home.state && text.includes(home.state))) continue;
-      const it = newItem(f, e.title.replace(/\s+-\s+[^-]{2,40}$/, ''), e.link, e.time, e.summary, k[0], isLocal(text), k[1]);
+      const it = newItem(f, title, e.link, e.time, sum, k[0], isLocal(text), k[1]);
       const outlet = txt(e.raw && e.raw.source).trim().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''); if (outlet) it.outlet = outlet;   // news searches name the outlet of each result
       it.isNews = true; out.push(it);
     }
@@ -324,7 +329,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     return newItem(f, first, f.link, tm, '', lvl, false, 'space');
   }).filter(Boolean); };
   H.advisory = H.ncsc = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14 && !(f.skip && f.skip.test(e.title))).slice(0, 12).map(e =>
-    newItem(f, e.title, e.link, e.time, e.summary, /alert|critical|actively exploited|urgent|ongoing/i.test(e.title) ? 'watch' : 'info', false, 'cyber'));
+    newItem(f, e.title, e.link, e.time, e.summary, /\balerts?\b|critical (vulnerabilit|flaw|bug|patch|update|security)|zero.day|actively exploited|under (active )?attack|urgent|ongoing (attack|campaign|incident|exploitation|threat)/i.test(e.title) ? 'watch' : 'info', false, 'cyber'));
   H.status = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 48).slice(0, 8).map(e => {
     const t = `${e.title} ${e.summary}`; return newItem(f, e.title, e.link, e.time, e.summary, /resolved|completed|scheduled|maintenance/i.test(t) ? 'info' : 'watch', false, 'status');
   });
@@ -504,7 +509,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     it.chart = chart('Exploited flaws added per week (CISA)', '/wk', pts, [{ v: normal, label: 'usual' }]);
     const out = [it];
     for (const x of v.filter(x => Date.now() - Date.parse(x.dateAdded) <= 7 * DAY).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 5)) {
-      const ransom = /known/i.test(x.knownRansomwareCampaignUse || '');
+      const ransom = /^known$/i.test(String(x.knownRansomwareCampaignUse || '').trim());   // the other value is "Unknown"
       out.push(newItem(f, `${x.cveID}: ${x.vulnerabilityName}${ransom ? ' (used by ransomware)' : ''}`, 'https://nvd.nist.gov/vuln/detail/' + x.cveID, x.dateAdded + 'T12:00:00Z', x.shortDescription || '', ransom ? 'watch' : 'info', false, 'kev'));
     }
     return out;
@@ -512,14 +517,14 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   H.who = async f => arr((await getJson(f.url)).value).slice(0, 12).map(o => {
     const tm = toIso(o.PublicationDate); if (ageHours(tm) > 24 * 45) return null;
     const t = String(o.Title), sum = stripHtml(o.Summary);
-    let lvl = /novel|unknown|undetermined|avian influenza|H5N1|H7N9|pandemic|ebola|marburg|MERS|SARS|nipah|plague/i.test(`${t} ${sum}`) && ageHours(tm) <= 24 * 10 ? 'watch' : 'info';   // amber for 10 days, then drops back
+    let lvl = /novel|unknown|undetermined|avian influenza|H5N1|H7N9|pandemic|ebola|marburg|MERS|SARS|nipah|plague/i.test(`${t} ${sum}`) ? 'watch' : 'info';   // fades after three days, like other notices
     const mine = US ? /United States of America|United States|\bUSA\b/i : /United Kingdom|\bUK\b|England|Wales|Scotland/i;
     if (mine.test(t)) lvl = 'warning';
     return newItem(f, t, 'https://www.who.int/emergencies/disease-outbreak-news/item/' + o.UrlName, tm, sum, lvl, mine.test(t), 'outbreak');
   }).filter(Boolean);
-  // a health agency's news feed (UKHSA, CDC): amber for fresh outbreak/alert items
+  // a health agency's news feed (UKHSA, CDC): amber for outbreak/alert items (a routine weekly publication never is)
   H.agency = H.ukhsa = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * (f.days || 14) && (!f.match || String(e.title).toLowerCase().includes(f.match))).slice(0, 10).map(e =>
-    newItem(f, stripHtml(e.title), e.link, e.time, e.summary, /outbreak|rise in cases|increase in cases|alert|pandemic|avian|measles|warning/i.test(`${e.title} ${e.summary}`) && ageHours(e.time) <= 24 * 8 ? 'watch' : 'info', false, 'ukhsa'));
+    newItem(f, stripHtml(e.title), e.link, e.time, e.summary, !f.routine && /outbreak|rise in cases|increase in cases|alert|pandemic|avian|measles|warning/i.test(`${e.title} ${e.summary}`) ? 'watch' : 'info', false, 'ukhsa'));
   H.fsa = async f => arr((await getJson(f.url)).items).slice(0, 15).map(a => {
     const tm = toIso(a.created); if (ageHours(tm) > 24 * 21) return null;
     const types = arr(a.type).join(' '); const kind = /FAFA/.test(types) ? 'Food alert for action' : /\/AA\b/.test(types) ? 'Allergy alert' : 'Recall';
@@ -571,6 +576,10 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   // keep panel order stable (Promise.all finishes in any order)
   const order = Object.fromEntries(feeds.map((f, i) => [f.id, i]));
   items.sort((a, b) => order[a.feed] - order[b.feed]); sources.sort((a, b) => order[a.id] - order[b.id]);
+
+  // A flag is for something new: headlines, advisories and outbreak notices lose theirs after three days (the row stays, in grey)
+  const FADE = new Set(['cyber', 'ukhsa', 'outbreak', 'kev', 'space', 'travel', 'status']);
+  for (const i of items) if (i.level === 'watch' && (i.isNews || FADE.has(i.tag)) && ageHours(i.time) > 72) i.level = 'info';
 
   // ---------- same story from several outlets ----------
   // Outlets word the same story differently, so match on shared key words, not exact titles.
