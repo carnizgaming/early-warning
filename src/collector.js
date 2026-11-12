@@ -288,6 +288,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
       if ((f.must && !f.must.test(text)) || (f.skip && f.skip.test(text))) continue;   // news searches match loosely
       if (f.nearOnly && !isLocal(text) && !(home.state && text.includes(home.state))) continue;
       const it = newItem(f, e.title.replace(/\s+-\s+[^-]{2,40}$/, ''), e.link, e.time, e.summary, k[0], isLocal(text), k[1]);
+      const outlet = txt(e.raw && e.raw.source).trim().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''); if (outlet) it.outlet = outlet;   // news searches name the outlet of each result
       it.isNews = true; out.push(it);
     }
     return out;
@@ -582,15 +583,23 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   // if both titles name things, they must share at least one
   const names = t => new Set((t.match(/\b[A-Z][a-zA-Z]+/g) || []).map(w => w.toLowerCase()).filter(w => w.length >= 3 && !STOP.has(w)));
   const share = (a, b) => { let n = 0; for (const w of a) if (b.has(w)) n++; return n; };
-  const sameStory = (a, b) => { const n = share(a.w, b.w); return n >= 3 && n / Math.min(a.w.size, b.w.size) >= 0.5 && (!a.n.size || !b.n.size || share(a.n, b.n) > 0); };
-  const stories = [];
-  for (const i of [...newsRaw].sort((a, b) => RANK[b.level] - RANK[a.level])) {   // stable sort keeps feed order within a level
-    const w = { w: keyWords(i.title), n: names(i.title) }; const s = stories.find(s => sameStory(s.w, w));
-    if (s) { s.lead.also = s.lead.also || []; s.lead.also.push({ source: i.source, title: i.title, link: i.link }); s.lead.sameStory.push(i.id); i.merged = true; }
-    else { i.sameStory = []; stories.push({ lead: i, w }); }
-  }
+  const sameStory = (a, b, min, part) => { const n = share(a.w, b.w); return n >= min && n / Math.min(a.w.size, b.w.size) >= part && (!a.n.size || !b.n.size || share(a.n, b.n) > 0); };
+  const mergeStories = (list, min, part) => {
+    const stories = [];
+    for (const i of [...list].sort((a, b) => RANK[b.level] - RANK[a.level])) {   // stable sort keeps feed order within a level
+      const w = { w: keyWords(i.title), n: names(i.title) }; const s = stories.find(s => sameStory(s.w, w, min, part));
+      if (s) { s.lead.also = s.lead.also || []; s.lead.also.push({ source: i.outlet || i.source, title: i.title, link: i.link }); s.lead.sameStory.push(i.id); i.merged = true; }
+      else { i.sameStory = []; stories.push({ lead: i, w }); }
+    }
+  };
+  mergeStories(newsRaw, 3, 0.5);
+  // The other panels' news comes from topic searches (shipping, gas supply, local), where every headline shares the search
+  // words. Ask for more in common there, so two different tanker incidents in the same strait stay apart.
+  const topical = {}; for (const i of items) if (i.isNews && i.panel !== 'news') (topical[i.panel] = topical[i.panel] || []).push(i);
+  for (const list of Object.values(topical)) mergeStories(list, 4, 0.6);
   for (let k = items.length - 1; k >= 0; k--) if (items[k].merged) items.splice(k, 1);
   for (const i of newsRaw) delete i.merged;
+  for (const list of Object.values(topical)) for (const i of list) delete i.merged;
 
   // charts travel separately
   const charts = {};
@@ -652,7 +661,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const factors = [];
   const heads = {}; for (const i of items.filter(i => i.panel === 'news')) { const k = i.title.toLowerCase().replace(/[^a-z0-9 ]/g, ''); if (!heads[k]) heads[k] = i; }
   // each story counts once, plus a quarter for each extra outlet covering it (up to two): wide coverage matters, but not threefold
-  let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level] * (1 + 0.25 * Math.min(2, new Set((i.also || []).map(a => a.source).filter(s => s !== i.source)).size));
+  let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level] * (1 + 0.25 * Math.min(2, new Set((i.also || []).map(a => a.source).filter(s => s !== (i.outlet || i.source))).size));
   const histFile = path.join(dataDir, 'tension-history.json');
   let hist = readJson(histFile, []).filter(x => x && ageHours(x.t) < 24 * 14);
   // Scoring got stricter in 1.0.3 (same story counted once, fewer keyword false alarms), so older history reads too high.

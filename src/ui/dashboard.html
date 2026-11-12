@@ -202,12 +202,12 @@ function itemHtml(i){
   const meta = [];
   if(i.local) meta.push('<span class="tag-local">NEAR YOU</span>');
   if(i.isNew) meta.push('<span class="tag-new">NEW</span>');
-  meta.push(esc(i.source));
+  meta.push(esc(i.outlet || i.source));   // a news search result names its outlet
   if(i.standing) meta.push('no recent change');
   if(i.changed) meta.push('changed '+esc(ago(i.changed)));
   // the same story from other outlets (merged by the collector); the whole row is one link, so these are names with their headlines on hover
-  if(i.also && i.also.length){ const others = [...new Set(i.also.map(a=>a.source).filter(s=>s!==i.source))];
-    if(others.length) meta.push('<span class="also" title="'+esc(i.also.map(a=>a.source+': '+a.title).join('\n'))+'">also '+esc(others.join(', '))+'</span>'); }
+  if(i.also && i.also.length){ const others = [...new Set(i.also.map(a=>a.source).filter(s=>s!==(i.outlet||i.source)))];
+    if(others.length) meta.push('<span class="also" title="'+esc(i.also.map(a=>a.source+': '+a.title).join('\n'))+'">also '+esc(others.length>3 ? others.slice(0,2).join(', ')+' and '+(others.length-2)+' more' : others.join(', '))+'</span>'); }
   if(i.time) meta.push(esc(ago(i.time)));
   if(i.panel==='news' && i.tag && i.level!=='info') meta.push('<span class="kw">'+esc(i.tag.trim())+'</span>');
   const sum = i.summary && i.panel!=='news' ? '<div class="s">'+esc(i.summary)+'</div>' : '';
