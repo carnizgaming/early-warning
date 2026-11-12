@@ -722,9 +722,10 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level] * (1 + 0.25 * Math.min(2, new Set((i.also || []).map(a => a.source).filter(s => s !== (i.outlet || i.source))).size));
   const histFile = path.join(dataDir, 'tension-history.json');
   let hist = readJson(histFile, []).filter(x => x && ageHours(x.t) < 24 * 14);
-  // Scoring got stricter in 1.0.3 (same story counted once, fewer keyword false alarms), so older history reads too high.
+  // Scoring got stricter in 1.0.3 (same story counted once, fewer keyword false alarms) and again in 1.0.5 (a country's
+  // name alone no longer flags a headline), so older history reads too high.
   // Rescale it once by how the newest old reading compares with now, so "normal" doesn't sit too high for two weeks.
-  const HV = 2, lastOld = [...hist].reverse().find(x => x.v !== HV);
+  const HV = 3, lastOld = [...hist].reverse().find(x => x.v !== HV);
   if (lastOld) { const k = lastOld.w > 0 ? Math.max(0.3, Math.min(1, W / lastOld.w)) : 1; for (const x of hist) if (x.v !== HV) { x.w = Math.round(x.w * k * 100) / 100; x.v = HV; } }
   const older = hist.filter(x => ageHours(x.t) > 24).map(x => +x.w).sort((a, b) => a - b);
   let baseW = older.length >= 48 ? older[Math.floor(older.length / 2)] : (settings.tension && settings.tension.newsBaseline) || 14;   // typical weight of a quiet day, used until there's a day of history if (baseW < 5) baseW = 5;
