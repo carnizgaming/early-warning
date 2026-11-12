@@ -149,7 +149,8 @@ function shared(s, add) {
   add({ id: 'swpc', panel: 'space', name: 'Solar flare and storm alerts (NOAA)', kind: 'swpc', url: 'https://services.swpc.noaa.gov/products/alerts.json', link: 'https://www.swpc.noaa.gov/products/alerts-watches-and-warnings' });
   add({ id: 'nasa-neo', panel: 'space', name: 'NASA asteroid close approaches', kind: 'neo', everyMinutes: 180, url: 'https://ssd-api.jpl.nasa.gov/cad.api?dist-max=0.02&date-min=now&date-max=%2B30&diameter=true&sort=dist', link: 'https://cneos.jpl.nasa.gov/ca/' });
   add({ id: 'nasa-sentry', panel: 'space', name: 'NASA Sentry impact risk', kind: 'sentry', everyMinutes: 360, url: 'https://ssd-api.jpl.nasa.gov/sentry.api', link: 'https://cneos.jpl.nasa.gov/sentry/' });
-  add({ id: 'nasa-donki', panel: 'space', name: 'NASA space weather (DONKI)', kind: 'donki', everyMinutes: 30, backoffMinutes: 30, url: `https://api.nasa.gov/DONKI/notifications?type=all&api_key=${s.nasaKey || 'DEMO_KEY'}`, link: 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/' });
+  // DONKI straight from NASA's modelling centre. The api.nasa.gov copy needs a key, and its shared demo key allows 10 requests a day.
+  add({ id: 'nasa-donki', panel: 'space', name: 'NASA space weather (DONKI)', kind: 'donki', everyMinutes: 60, backoffMinutes: 30, url: 'https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?type=all', link: 'https://ccmc.gsfc.nasa.gov/DONKI/' });
   add({ id: 'kev', panel: 'cyber', name: 'CISA exploited flaws (weekly trend)', kind: 'kev', everyMinutes: 360, backoffMinutes: 120, url: 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', link: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog' });
   add({ id: 'cloudflare', panel: 'cyber', name: 'Cloudflare status (internet backbone)', kind: 'status', url: 'https://www.cloudflarestatus.com/history.rss', link: 'https://www.cloudflarestatus.com/' });
 }

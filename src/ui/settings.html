@@ -77,9 +77,6 @@ a{color:var(--accent)}
         <div><label for="paper">Local paper RSS feed (optional)</label><input type="text" id="paper" placeholder="https://…/news/rss/"></div>
         <div><label for="papername">Paper name</label><input type="text" id="papername" placeholder="e.g. your local paper"></div>
       </div>
-      <label for="nasa">NASA API key (optional)</label>
-      <input type="text" id="nasa" placeholder="Leave blank to use the shared demo key">
-      <div class="hint">Free from <a href="https://api.nasa.gov/" target="_blank">api.nasa.gov</a>. Only needed if the solar storm feed keeps saying "Too Many Requests".</div>
     </div>
 
     <h2>Feeds</h2>
@@ -119,7 +116,6 @@ async function init(){
     disabled = new Set(r.settings.disabledFeeds || []);
     $('notif').checked = r.settings.notifications !== false;
     $('every').value = String(r.settings.refreshMinutes || 5);
-    $('nasa').value = r.settings.nasaKey || '';
     fill(); await renderFeeds();
   }
 }
@@ -174,7 +170,7 @@ $('pc').addEventListener('keydown', e => { if (e.key === 'Enter') $('find').clic
 ['roads','paper','news'].forEach(id => $(id).addEventListener('change', renderFeeds));
 $('save').onclick = async () => {
   $('save').disabled = true; $('save').textContent = current ? 'Saving…' : 'Starting…';
-  await window.ew.saveSettings({ home: collectHome(), disabledFeeds: [...disabled], notifications: $('notif').checked, refreshMinutes: +$('every').value, nasaKey: $('nasa').value.trim() }, $('auto').checked);
+  await window.ew.saveSettings({ home: collectHome(), disabledFeeds: [...disabled], notifications: $('notif').checked, refreshMinutes: +$('every').value }, $('auto').checked);
 };
 $('log').onclick = e => { e.preventDefault(); window.ew.openLog(); };
 init();
