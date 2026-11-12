@@ -324,12 +324,13 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     const it = newItem(f, `Geomagnetic Kp ${kp.toFixed(1)}: ${g}`, f.link, toIso(String(tt).replace(' ', 'T') + (String(tt).endsWith('Z') ? '' : 'Z')), 'Kp 0-4 normal. G3+ storms can disrupt GPS, radio and, at G4-G5, power grids.', kp >= 9 ? 'critical' : kp >= 7 ? 'warning' : kp >= 5 ? 'watch' : 'info', false, 'kp');
     it.value = kp; return [it];
   };
-  H.swpc = async f => (await getJson(f.url)).slice(0, 25).map(a => {
+  H.swpc = async f => { const had = new Set(); return (await getJson(f.url)).slice(0, 25).map(a => {
     const tm = toIso(String(a.issue_datetime).replace(' ', 'T') + 'Z'); if (ageHours(tm) > 72) return null;
     const msg = String(a.message || ''); const first = (msg.split(/\r?\n/).find(l => /^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/.test(l)) || '').trim(); if (!first) return null;
     const lvl = /\bG[45]\b|K-index of [89]|X-?ray flux.*X\d|R[45]\b|S[45]\b/i.test(msg) ? 'warning' : /\bG3\b|K-index of 7|X-class|\bX\d/i.test(msg) ? 'watch' : 'info';
+    if (had.has(first)) return null; had.add(first);   // the feed is newest first and reissues the same line: keep the newest
     return newItem(f, first, f.link, tm, '', lvl, false, 'space');
-  }).filter(Boolean);
+  }).filter(Boolean); };
   H.advisory = H.ncsc = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 24 * 14 && !(f.skip && f.skip.test(e.title))).slice(0, 12).map(e =>
     newItem(f, e.title, e.link, e.time, e.summary, /alert|critical|actively exploited|urgent|ongoing/i.test(e.title) ? 'watch' : 'info', false, 'cyber'));
   H.status = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 48).slice(0, 8).map(e => {
@@ -435,17 +436,33 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     it.chart = Object.assign(chart('Grid frequency, last hour', 'Hz', pts, [{ v: 49.8, label: 'low limit' }, { v: 50.2, label: 'high limit' }]), { min: 49.6, max: 50.4 }); return [it];
   };
   H.syswarn = async f => {
-    const out = [];
+    // The operator reissues a notice several times and then cancels it, all under the same type. Newest first, keep one
+    // row per notice (type + the period it covers), so the row shows the latest state and a cancellation says so.
+    const out = [], done = new Set();
     for (const w of arr((await getJson(f.url)).data).sort((a, b) => String(b.publishTime).localeCompare(a.publishTime))) {
-      const type = String(w.warningType || ''), t = stripHtml(w.warningText || ''), all = `${type} ${t}`;
+      // the text has literal "\n" in it; "full" is all of it (the period is often past the 300 characters the summary keeps)
+      const type = String(w.warningType || '').trim(), full = String(w.warningText || '').replace(/<[^>]+>/g, ' ').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+      const t = stripHtml(full.replace(/^From\s*:.*?Control Centre\s*/i, '')), all = `${type} ${t}`;
       if (/SO-SO|TRADES/i.test(type)) continue;
+      const pm = full.match(/period:?\s*from (\d\d):(\d\d) hrs to (\d\d):(\d\d) hrs on\s+\w+ (\d\d)\/(\d\d)\/(\d{4})/i);
+      const key = type + '|' + (pm ? pm[0].toLowerCase().replace(/period:?\s*/, '') : full.split(/Notification Issued at|Issued by/i)[0].slice(0, 400));
+      if (done.has(key)) continue; done.add(key);
+      let period = '', ended = false;
+      if (pm) {   // times are UK local; read as UTC, which in summer only keeps a notice "live" an hour longer
+        const day = Date.UTC(+pm[7], +pm[6] - 1, +pm[5]), from = +pm[1] * 60 + +pm[2], to = +pm[3] * 60 + +pm[4];
+        period = `${new Date(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })} ${pm[1]}:${pm[2]} to ${pm[3]}:${pm[4]}`;
+        ended = now.getTime() > day + (to + (to <= from ? 1440 : 0)) * 60000;
+      }
+      const cancelled = /cancel|withdraw/i.test(`${type} ${full}`);
       let lvl = 'info';
       if (!/IT systems? outage|systems? maintenance|planned outage of|BMRS|data publication/i.test(all)) {
         if (/demand control|demand reduction|load shedding|rota/i.test(all)) lvl = 'warning';
         else if (/margin|capacity market|system warning|nism|inadequate/i.test(all)) lvl = 'watch';
-        if (/cancel|withdraw/i.test(all)) lvl = 'info';
+        if (cancelled || ended) lvl = 'info';
       }
-      out.push(newItem(f, 'Grid notice: ' + titleCase(type), f.link, toIso(w.publishTime), t, lvl, false, 'syswarn'));
+      const it = newItem(f, 'Grid notice: ' + titleCase(type).replace(/\bIt\b/, 'IT') + (cancelled ? ' cancelled' : '') + (period ? (cancelled ? ` (was ${period})` : `, ${period}${ended ? ' (ended)' : ''}`) : ''), f.link, toIso(w.publishTime), t, lvl, false, 'syswarn');
+      it.id = crypto.createHash('sha1').update(`${f.id}|${key}|${cancelled}`).digest('hex').slice(0, 16);   // titles can repeat; the notice itself can't
+      out.push(it);
       if (out.length >= 8) break;
     }
     if (!out.length) out.push(newItem(f, 'No grid warnings in the last 3 days', f.link, iso(now), 'Electricity margin notices and demand control warnings from the grid operator appear here.', 'info', false, 'syswarn'));
