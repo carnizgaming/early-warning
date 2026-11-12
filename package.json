@@ -1,7 +1,7 @@
 {
   "name": "early-warning",
   "productName": "Early Warning",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Early warning dashboard: official alerts, weather, floods, power, grid, news flashpoints, health and more for your area.",
   "main": "src/main.js",
   "author": "Prepping Library",
