@@ -82,16 +82,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const kw = settings.keywords || (US ? KW.US : KW);
 
   const isLocal = text => { const t = String(text).toLowerCase(); return localWords.some(w => t.includes(w)); };
-  const keywordLevel = text => {
-    const t = ' ' + String(text).toLowerCase() + ' ';
-    const soft = (kw.notWords || []).some(n => n && t.includes(n));
-    let r = ['info', ''];
-    for (const k of kw.critical) if (t.includes(k)) { r = ['critical', k]; break; }
-    if (r[0] === 'info') for (const k of kw.warning) if (t.includes(k)) { r = ['warning', k]; break; }
-    if (r[0] === 'info') for (const k of kw.watch) if (t.includes(k)) { r = ['watch', k]; break; }
-    if (soft) r[0] = { critical: 'warning', warning: 'watch', watch: 'info', info: 'info' }[r[0]];
-    return r;
-  };
+  const keywordLevel = KW.matcher(kw);   // (title, summary) => [level, keyword]; the rules are in keywords.js
   const newItem = (f, title, link, time, summary, level, local = false, tag = '') => ({
     id: crypto.createHash('sha1').update(`${f.id}|${title}|${link}`).digest('hex').slice(0, 16),
     source: f.name, feed: f.id, panel: f.panel, title, link, time, summary, level, local: !!local, tag
@@ -293,7 +284,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     for (const e of await readFeed(f.url)) {
       if (ageHours(e.time) > 48) continue;
       if (out.length >= 40) break;
-      const text = `${e.title} ${e.summary}`, k = keywordLevel(text);
+      const text = `${e.title} ${e.summary}`, k = keywordLevel(e.title, e.summary);
       if ((f.must && !f.must.test(text)) || (f.skip && f.skip.test(text))) continue;   // news searches match loosely
       if (f.nearOnly && !isLocal(text) && !(home.state && text.includes(home.state))) continue;
       const it = newItem(f, e.title.replace(/\s+-\s+[^-]{2,40}$/, ''), e.link, e.time, e.summary, k[0], isLocal(text), k[1]);
@@ -643,8 +634,12 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   let W = 0; for (const i of Object.values(heads)) W += { info: 0, watch: 0.5, warning: 2, critical: 6 }[i.level] * (1 + 0.25 * Math.min(2, new Set((i.also || []).map(a => a.source).filter(s => s !== i.source)).size));
   const histFile = path.join(dataDir, 'tension-history.json');
   let hist = readJson(histFile, []).filter(x => x && ageHours(x.t) < 24 * 14);
+  // Scoring got stricter in 1.0.3 (same story counted once, fewer keyword false alarms), so older history reads too high.
+  // Rescale it once by how the newest old reading compares with now, so "normal" doesn't sit too high for two weeks.
+  const HV = 2, lastOld = [...hist].reverse().find(x => x.v !== HV);
+  if (lastOld) { const k = lastOld.w > 0 ? Math.max(0.3, Math.min(1, W / lastOld.w)) : 1; for (const x of hist) if (x.v !== HV) { x.w = Math.round(x.w * k * 100) / 100; x.v = HV; } }
   const older = hist.filter(x => ageHours(x.t) > 24).map(x => +x.w).sort((a, b) => a - b);
-  let baseW = older.length >= 48 ? older[Math.floor(older.length / 2)] : (settings.tension && settings.tension.newsBaseline) || 25; if (baseW < 5) baseW = 5;
+  let baseW = older.length >= 48 ? older[Math.floor(older.length / 2)] : (settings.tension && settings.tension.newsBaseline) || 14;   // typical weight of a quiet day, used until there's a day of history if (baseW < 5) baseW = 5;
   const cNews = clamp((W / baseW - 0.8) * 60);
   factors.push({ name: 'Crisis headlines', score: Math.round(cNews), detail: `${Object.values(heads).filter(i => i.level !== 'info').length} flagged stories, weight ${Math.round(W)} vs normal ${Math.round(baseW)}` });
   const g = items.find(i => i.tag === 'gdelt'); let cG = null;
@@ -667,7 +662,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const lv = score >= 85 ? 1 : score >= 65 ? 2 : score >= 45 ? 3 : score >= 25 ? 4 : 5;
   const NAMES = { 5: 'NORMAL', 4: 'RAISED', 3: 'ELEVATED', 2: 'SEVERE', 1: 'CRITICAL' };
   const MEAN = { 5: 'Background noise. Nothing beyond the usual world trouble.', 4: 'More conflict news than usual. Worth keeping an eye on.', 3: 'A significant crisis is building. Check supplies and fuel, keep phones charged.', 2: 'Grave events reported by several outlets. Top up water, fuel and cash; follow official advice closely.', 1: 'Confirmed national emergency. Follow official instructions; use your household plan.' };
-  hist.push({ t: iso(now), s: score, w: W }); writeJson(histFile, hist);
+  hist.push({ t: iso(now), s: score, w: W, v: HV }); writeJson(histFile, hist);
   const byH = {}; for (const x of hist.filter(x => ageHours(x.t) <= 24 * 7)) { const k = iso(x.t).slice(0, 13); byH[k] = Math.max(byH[k] || 0, x.s); }
   const tension = { level: lv, name: NAMES[lv], score, meaning: MEAN[lv], factors, trend: Object.keys(byH).sort().map(k => byH[k]), learning: older.length < 48 };
   if (lv <= 2) {
