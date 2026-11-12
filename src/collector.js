@@ -402,15 +402,26 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     }).filter(Boolean);
   };
   const distKm = (a1, o1, a2, o2) => { const r = Math.PI / 180, dl = (a2 - a1) * r, dn = (o2 - o1) * r; const a = Math.sin(dl / 2) ** 2 + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dn / 2) ** 2; return 2 * 6371 * Math.asin(Math.sqrt(a)); };
-  H.eonet = async f => arr((await getJson(f.url)).events).map(e => {
-    const g = arr(e.geometry).slice(-1)[0] || {}; const km = (g.type === 'Point' && g.coordinates) ? distKm(home.lat, home.lon, +g.coordinates[1], +g.coordinates[0]) : 99999;
-    return { e, tm: toIso(g.date), km, cat: arr(e.categories).map(c => c.title).join(', ') };
-  }).sort((a, b) => ((a.km > 800) - (b.km > 800)) || (new Date(b.tm) - new Date(a.tm))).slice(0, 12).map(x => {
-    let lvl = 'info', local = false;
-    if (x.km < 150) { lvl = 'warning'; local = true; } else if (x.km < 800) lvl = 'watch'; else if (/volcano/i.test(x.cat) && x.km < 2500) lvl = 'watch';
-    const src = (arr(x.e.sources)[0] || {}).url;
-    return newItem(f, `${x.cat}: ${x.e.title}`, src || x.e.link, x.tm, `Seen by NASA Earth observation${x.km < 99999 ? ` (${Math.round(x.km).toLocaleString('en-GB')} km away)` : ''}.`, lvl, local, 'eonet');
-  });
+  // NASA natural events: the ones within 2,500 km get a row each; the rest of the world's storms, fires and icebergs are counted
+  H.eonet = async f => {
+    const all = arr((await getJson(f.url)).events).map(e => {
+      const g = arr(e.geometry).slice(-1)[0] || {}; const km = (g.type === 'Point' && g.coordinates) ? distKm(home.lat, home.lon, +g.coordinates[1], +g.coordinates[0]) : 99999;
+      return { e, tm: toIso(g.date), km, cat: arr(e.categories).map(c => c.title).join(', ') };
+    });
+    const out = all.filter(x => x.km < 2500).sort((p, q) => p.km - q.km).slice(0, 12).map(x => {
+      let lvl = 'info', local = false;
+      if (x.km < 150) { lvl = 'warning'; local = true; } else if (x.km < 800 || /volcano/i.test(x.cat)) lvl = 'watch';
+      const src = (arr(x.e.sources)[0] || {}).url;
+      return newItem(f, x.cat + ': ' + x.e.title, src || x.e.link, x.tm, 'Seen by NASA Earth observation (' + Math.round(x.km).toLocaleString('en-GB') + ' km away).', lvl, local, 'eonet');
+    });
+    const far = all.filter(x => x.km >= 2500);
+    if (far.length) {
+      const by = {}; for (const x of far) { const c = (x.cat.split(',')[0] || 'other').trim().toLowerCase(); by[c] = (by[c] || 0) + 1; }
+      out.push(newItem(f, far.length + ' natural event' + (far.length === 1 ? '' : 's') + ' elsewhere in the world (NASA)', f.link, far.map(x => x.tm).filter(Boolean).sort().pop() || iso(now),
+        Object.entries(by).sort((p, q) => q[1] - p[1]).map(([c, n]) => n + ' ' + c).join(', ') + '. None within 2,500 km of home.', 'info', false, 'eonet-summary'));
+    }
+    return out;
+  };
   H.gdelt = async f => {
     const j = await getJson(f.url); const series = j.timeline ? arr(j.timeline)[0].data : j.data;
     const pts = arr(series).filter(d => d && d.value !== undefined).map(d => { const m = String(d.date).match(/^(\d{4})(\d\d)(\d\d)T?(\d\d)?(\d\d)?/); return { t: m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : new Date(d.date).getTime(), v: +d.value }; }).filter(p => !isNaN(p.t)).sort((a, b) => a.t - b.t);
@@ -753,7 +764,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const seenFile = path.join(dataDir, 'seen.json');
   const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [], live = new Set();
   // a reading (wind, tide, grid frequency, a count) is reworded on every refresh; that doesn't make it new, and it is always about home
-  const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary']);
+  const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary', 'eonet-summary']);
   for (const i of items) {
     // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
     const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
