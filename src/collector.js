@@ -369,6 +369,51 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   H.status = async f => (await readFeed(f.url)).filter(e => ageHours(e.time) <= 48).slice(0, 8).map(e => {
     const t = `${e.title} ${e.summary}`; return newItem(f, e.title, e.link, e.time, e.summary, /resolved|completed|scheduled|maintenance/i.test(t) ? 'info' : 'watch', false, 'status');
   });
+  // Status pages of the big online services (Microsoft 365, Azure, Google, AWS). An incident that is still open is flagged and
+  // counts towards the status: an Outlook or Gmail outage lands on the household whatever the news makes of it.
+  const SVC_DONE = /resolved|restored|mitigated|operating normally|false ?positive|post.?incident|completed|\band ended at\b/i;
+  const SVC_FINE = /^(operational|available|healthy|normal)?$/i;
+  const words = s => String(s).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();          // "ServiceDegradation" -> "service degradation"
+  const brief = (s, n = 400) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s; };
+  H.service = async f => {
+    const out = [], who = f.short || f.service;
+    const row = (title, time, summary, open, link) => { const it = newItem(f, title.replace(/\s+/g, ' ').trim(), link || f.link, time, brief(summary), open ? 'watch' : 'info', false, 'service'); it.service = who; out.push(it); };
+    if (f.format === 'm365') {                        // one entry per consumer service, with its state
+      for (const x of await getJson(f.url)) {
+        const st = String(x.Status || '').trim(); if (SVC_FINE.test(st)) continue;
+        const name = String(x.ServiceDisplayName || f.service).replace(/\s*\(consumer\)/i, '');
+        row(name + ' ' + words(st) + (x.Title ? ': ' + x.Title : ''), toIso(x.LastUpdatedTime), String(x.Message || '').replace(/^User impact:[^\n]*\s+/i, ''), !SVC_DONE.test(st));
+      }
+    } else {
+      const had = new Set();
+      const list = (await readFeed(f.url)).filter(e => ageHours(e.time) <= 48).sort((a, b) => new Date(b.time) - new Date(a.time));
+      for (const e of list) {
+        const guid = txt(e.raw && e.raw.guid), st = txt(e.raw && e.raw.status).trim(), sum = e.summary || '';
+        const full = deepText(e.raw && (e.raw.description || e.raw.summary || e.raw.content)).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ') || sum;   // the reader keeps 300 characters
+        if (f.format === 'm365rss' && SVC_FINE.test(st)) continue;
+        // a provider posts one update at a time: the newest for each incident says where it stands
+        const key = f.format === 'aws' ? guid.replace(/_\d+$/, '') : f.format === 'm365rss' ? f.id : e.link || e.title; if (had.has(key)) continue; had.add(key);
+        let title = e.title.replace(/^(resolved|update|ongoing|investigating):\s*/i, ''), open;
+        if (f.format === 'm365rss') {
+          const m = sum.match(/User impact:\s*([^.]+)\./i); title = words(st) + (m ? ': ' + m[1].trim() : ''); open = !SVC_DONE.test(st);
+        } else if (f.format === 'aws') {              // AWS also posts "impact" and "informational" notes; a disruption is its top grade
+          const region = (guid.match(/-([a-z]{2}-[a-z]+-\d)_/) || [])[1]; if (region) title += ' (' + region + ')';
+          open = /disruption/i.test(e.title) && !SVC_DONE.test(e.title); title = ': ' + title;
+        } else {
+          const m = /^incident at /i.test(title) && full.match(/(?:Summary|Description):\s*([^.]+)\./i); if (m) title = m[1].trim();
+          open = !SVC_DONE.test(e.title + ' ' + sum.slice(0, 200)); title = ': ' + title;
+        }
+        // an incident in a region this country doesn't lean on stays a grey row
+        const where = e.title + ' ' + guid + ' ' + sum.slice(0, 300);
+        if (open && f.near && /\b[a-z]{2}-[a-z]+-\d\b|\b[a-z]+-[a-z]+\d\b/i.test(where) && !f.near.test(where)) open = false;
+        const cur = full.match(/Current status:\s*(.+?)\s*(?:Next update by|$)/i);
+        row(f.service + (title.startsWith(':') ? '' : ' ') + title, e.time, cur ? cur[1] : sum, open, /^https?:/.test(e.link) && !/status\.aws\.amazon\.com\/?$/.test(e.link) ? e.link : f.link);
+        if (out.length >= 4) break;
+      }
+    }
+    if (!out.some(i => i.level !== 'info')) { const it = newItem(f, who + ': no open incidents', f.link, iso(now), '', 'info', false, 'service-ok'); it.service = who; out.push(it); }
+    return out;
+  };
   const neoSize = (h, diam) => (diam !== null && diam !== undefined && diam !== '') ? +diam * 1000 : (h ? 1329000 / Math.sqrt(0.14) * Math.pow(10, -(+h) / 5) : 0);
   H.neo = async f => {
     const j = await getJson(f.url); const fi = {}; j.fields.forEach((k, i) => fi[k] = i);
@@ -628,6 +673,16 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const FADE = new Set(['cyber', 'ukhsa', 'outbreak', 'kev', 'space', 'travel', 'status']);
   for (const i of items) if (i.level === 'watch' && (i.isNews || FADE.has(i.tag)) && ageHours(i.time) > 72) i.level = 'info';
 
+  // One row for the online services with nothing wrong, not one each
+  const svcOpen = new Set(items.filter(i => i.tag === 'service' && i.level !== 'info').map(i => i.service));
+  const svcOk = items.filter(i => i.tag === 'service-ok');
+  if (svcOk.length) {
+    const fine = [...new Set(svcOk.map(i => i.service))].filter(n => !svcOpen.has(n)), keep = svcOk[0];
+    for (let k = items.length - 1; k >= 0; k--) if (items[k].tag === 'service-ok' && (items[k] !== keep || !fine.length)) items.splice(k, 1);
+    if (fine.length) { keep.title = 'No open incidents at ' + (fine.length > 1 ? fine.slice(0, -1).join(', ') + ' or ' + fine[fine.length - 1] : fine[0]); keep.source = 'Online service status pages'; }
+  }
+  for (const i of items) delete i.service;
+
   // ---------- same story from several outlets ----------
   // Outlets word the same story differently, so match on shared key words, not exact titles.
   // The most serious copy (then the first by feed order) leads; the rest become "also" on it.
@@ -723,6 +778,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   // or measured source for your area. Flagged world news, shipping, cyber, health and space items stay in their panels (and
   // feed the tension level) without holding the status at WATCH. A serious headline counts when it is local or from a
   // home-country feed; an airstrike abroad is what the tension level is for. Critical headlines count wherever they are.
+  // An open incident on one of the big online services counts too: it reaches every home that uses them.
   let overall = 'info'; const why = [];
   const HERE = ['official', 'weather', 'floods', 'power'];
   for (const i of items) {
@@ -730,7 +786,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     if ((i.isNews || ['world', 'space', 'cyber', 'health', 'money'].includes(i.panel)) && l === 'warning' && !i.local) l = 'watch';
     if (i.isNews && RANK[l] > RANK.warning) l = 'warning';
     if (i.isNews && i.level === 'warning' && !i.local && !i.home) l = 'info';
-    if (i.level === 'watch' && !(i.local || HERE.includes(i.panel) || (!i.isNews && ['energy', 'local'].includes(i.panel)))) l = 'info';
+    if (i.level === 'watch' && !(i.local || HERE.includes(i.panel) || i.tag === 'service' || (!i.isNews && ['energy', 'local'].includes(i.panel)))) l = 'info';
     if (l !== 'info') why.push([l, i.title]);
     overall = maxLevel(overall, l);
   }
@@ -786,7 +842,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const seenFile = path.join(dataDir, 'seen.json');
   const seen = readJson(seenFile, {}); const firstRun = !Object.keys(seen).length; const fresh = [], live = new Set();
   // a reading (wind, tide, grid frequency, a count) is reworded on every refresh; that doesn't make it new, and it is always about home
-  const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary', 'eonet-summary']);
+  const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary', 'eonet-summary', 'service-ok']);
   for (const i of items) {
     // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
     const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];

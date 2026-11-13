@@ -153,6 +153,17 @@ function shared(s, add) {
   add({ id: 'nasa-donki', panel: 'space', name: 'NASA space weather (DONKI)', kind: 'donki', everyMinutes: 60, backoffMinutes: 30, url: 'https://ccmc.gsfc.nasa.gov/DONKI/WS/get/notifications?type=all', link: 'https://ccmc.gsfc.nasa.gov/DONKI/' });
   add({ id: 'kev', panel: 'cyber', name: 'CISA exploited flaws (weekly trend)', kind: 'kev', everyMinutes: 360, backoffMinutes: 120, url: 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', link: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog' });
   add({ id: 'cloudflare', panel: 'cyber', name: 'Cloudflare status (internet backbone)', kind: 'status', url: 'https://www.cloudflarestatus.com/history.rss', link: 'https://www.cloudflarestatus.com/' });
+  // The providers' own status pages for the online services most homes and employers lean on. A cloud provider has small
+  // incidents somewhere most days, so those only flag when they name no region, or one this country's services run in.
+  const SVC = { panel: 'cyber', kind: 'service', everyMinutes: 10 };
+  const near = isUS(s.home) ? /\bus-(east|west)-\d\b|\bus-(east|west|central|south)\d\b|multiple regions|all regions/i
+    : /\b(eu-west-[12]|us-east-1|europe-west[12])\b|multiple regions|all regions/i;
+  add({ ...SVC, id: 'svc-m365', name: 'Microsoft 365 status (Outlook, Teams, OneDrive)', service: 'Microsoft 365', format: 'm365', url: 'https://status.cloud.microsoft/api/posts/m365Consumer', link: 'https://status.cloud.microsoft/' });
+  add({ ...SVC, id: 'svc-m365-work', name: 'Microsoft 365 status for work and school accounts', service: 'Microsoft 365 (work accounts)', short: 'Microsoft 365', format: 'm365rss', url: 'https://status.office365.com/api/feed/mac', link: 'https://status.cloud.microsoft/' });
+  add({ ...SVC, id: 'svc-azure', name: 'Microsoft Azure status', service: 'Microsoft Azure', short: 'Azure', url: 'https://azure.status.microsoft/en-gb/status/feed/', link: 'https://azure.status.microsoft/' });
+  add({ ...SVC, id: 'svc-gws', name: 'Google Workspace status (Gmail, Drive, Meet)', service: 'Google Workspace', url: 'https://www.google.com/appsstatus/dashboard/en-GB/feed.atom', link: 'https://www.google.com/appsstatus/dashboard/' });
+  add({ ...SVC, id: 'svc-gcp', name: 'Google Cloud status', service: 'Google Cloud', near, url: 'https://status.cloud.google.com/en/feed.atom', link: 'https://status.cloud.google.com/' });
+  add({ ...SVC, id: 'svc-aws', name: 'Amazon Web Services status', service: 'Amazon Web Services', short: 'AWS', format: 'aws', near, url: 'https://status.aws.amazon.com/rss/all.rss', link: 'https://health.aws.amazon.com/health/status' });
 }
 
 module.exports = { buildFeeds, MET_REGIONS, isUS };
