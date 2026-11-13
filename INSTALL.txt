@@ -10,8 +10,8 @@ FIRST TIME: enter your UK postcode or US ZIP code. It works out your weather war
 flood, river and tide gauges, power data and local news. You can fine-tune what counts as "near you" and which roads to watch.
 
 WINDOWS
-  Early-Warning-Setup-1.0.5.exe     installs it (Start menu + desktop shortcut)
-  Early-Warning-Portable-1.0.5.exe  runs without installing (e.g. from a USB stick)
+  Early-Warning-Setup-1.0.6.exe     installs it (Start menu + desktop shortcut)
+  Early-Warning-Portable-1.0.6.exe  runs without installing (e.g. from a USB stick)
   Windows will say "Windows protected your PC" because the app isn't signed by a paid
   certificate. Click "More info" then "Run anyway". It only asks the first time.
 
@@ -22,8 +22,8 @@ MAC  (Apple silicon M1-M4: ...mac-arm64.zip   Intel Macs: ...mac-x64.zip)
   3. Open it from Applications. If macOS still blocks it: System Settings > Privacy & Security > Open Anyway.
 
 LINUX
-  Early-Warning-1.0.5.AppImage
-  Make it executable (right-click > Properties > Allow executing, or: chmod +x Early-Warning-1.0.5.AppImage)
+  Early-Warning-1.0.6.AppImage
+  Make it executable (right-click > Properties > Allow executing, or: chmod +x Early-Warning-1.0.6.AppImage)
   and double-click it. Some distros need libfuse2 installed for AppImages.
 
 USING IT
