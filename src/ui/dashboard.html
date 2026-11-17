@@ -22,6 +22,9 @@ header{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:cen
 @keyframes pulse{50%{background:#5c1010}}
 .reasons{color:var(--muted);font-size:13px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .reasons b{color:var(--text);font-weight:600}
+.reasons .r{cursor:pointer;color:var(--text)} .reasons .r:hover{text-decoration:underline}
+.reasons .r.l-watch{color:var(--watch)} .reasons .r.l-warning{color:var(--warning)} .reasons .r.l-critical{color:var(--critical)}
+.reasons .r .pn{color:var(--muted);font-weight:400}
 .right{text-align:right;white-space:nowrap}
 .clock{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
 .upd{font-size:12px;color:var(--muted)} .upd.stale{color:var(--critical);font-weight:700}
@@ -372,6 +375,8 @@ window.addEventListener('resize', ()=>{ clearTimeout(rsz); rsz = setTimeout(()=>
 function setExpanded(id){ expanded = id; if(data) render(); }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && expanded) setExpanded(null); });
 document.addEventListener('click', e=>{
+  const g = e.target.closest && e.target.closest('[data-goto]');
+  if(g){ const id = g.getAttribute('data-goto'); if(id==='tension') document.getElementById('tension').classList.add('open'); else setExpanded(id); return; }
   const b = e.target.closest && e.target.closest('[data-expand]'); if(b){ e.preventDefault(); const id=b.getAttribute('data-expand'); setExpanded(expanded===id?null:id); return; }
   if(e.target.id==='backdrop') setExpanded(null);
 });
@@ -423,8 +428,13 @@ function render(){
   }
   // header line: why the status is what it is. Flagged world items don't raise the status, so say where they are.
   const where = esc(d.home) + ((d.region || (d.nation!=='US' && d.country)) ? ', ' + esc(d.region || d.country) : '') + (d.nation==='US' ? ', the US' : ', the UK') + ' and the world';
+  // each reason in its own level's colour, with the panel it is in; a click opens that panel
+  const why = r => { const i = items.find(x=>x.title===r), p = i && PANELS.find(x=>x.id===i.panel), tn = !i && /^World tension/.test(r);
+    const lv = i ? i.level : tn && d.tension ? (d.tension.level===1?'critical':d.tension.level===2?'warning':'watch') : 'watch';
+    const go = p ? p.id : tn ? 'tension' : '';
+    return '<span class="r l-'+lv+'"'+(go?' data-goto="'+go+'" title="Open '+esc(p?p.title:'the tension breakdown')+'"':'')+'>'+esc(r)+(p?' <span class="pn">('+esc(p.title.replace(/ \(news\)$/,''))+')</span>':'')+'</span>'; };
   document.getElementById('reasons').innerHTML = (d.reasons && d.reasons.length)
-    ? '<b>Why:</b> ' + d.reasons.map(esc).join(' &nbsp;|&nbsp; ')
+    ? '<b>'+esc(LABEL[d.overall] || d.overall)+' because:</b> ' + d.reasons.map(why).join(' &nbsp;|&nbsp; ')
     : '<b>Nothing needs your attention.</b> Watching ' + where + '.' + (d.overall==='info' && background.length ? ' Flagged for background: ' + background.join(', ') + '.' : '');
   // panels go into columns left to right, so the reading order stays the same at any width
   const scrolls = {}, gridTop = grid.scrollTop; grid.querySelectorAll('.panel').forEach(p=>{ scrolls[p.dataset.panel] = p.querySelector('.list').scrollTop; });

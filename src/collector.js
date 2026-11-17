@@ -749,8 +749,13 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     const cur = ph[ph.length - 1].total, ratio = baseline ? Math.round(cur / baseline * 100) / 100 : null;
     if (ps && ratio !== null) {
       const jump = cur - baseline;
-      if (ratio >= 2 && jump >= 30) { ps.level = maxLevel(ps.level, 'warning'); ps.title = `Power cuts surging: ${cur} now, x${ratio} normal (${baseline})`; }
-      else if (ratio >= 1.5 && jump >= 15) { ps.level = maxLevel(ps.level, 'watch'); ps.title = `Power cuts rising: ${cur} now, x${ratio} normal (${baseline})`; }
+      // say where, how much and whether any are near home: "x3.13 normal (16)" left people guessing what the warning was
+      const area = ps.feed === 'powercuts' ? 'South Wales, the Midlands and the South West' : 'the network';
+      const times = ratio >= 3 ? Math.round(ratio) : ratio.toFixed(1);
+      const near = ps.homeCount ? `${ps.homeCount} in your postcode area` : ps.nearCount ? `${ps.nearCount} nearby` : 'none near you';
+      const say = w => `Power cuts ${w} across ${area}: ${cur} now, ${times} times the usual ${baseline} (${near})`;
+      if (ratio >= 2 && jump >= 30) { ps.level = maxLevel(ps.level, 'warning'); ps.title = say('surging'); }
+      else if (ratio >= 1.5 && jump >= 15) { ps.level = maxLevel(ps.level, 'watch'); ps.title = say('rising'); }
     }
     const byHour = {};
     for (const x of ph.filter(x => ageHours(x.t) <= 24 * 7)) { const k = iso(x.t).slice(0, 13) + ':00:00Z'; const b = byHour[k] || (byHour[k] = { t: k, total: 0, local: 0 }); b.total = Math.max(b.total, x.total); b.local = Math.max(b.local, x.local); }
