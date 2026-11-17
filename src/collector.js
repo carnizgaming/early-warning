@@ -275,7 +275,7 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
       const summary = [status && `Status: ${status}`, etr && `Estimated restore: ${etr}`, ref && `Ref: ${ref}`].filter(Boolean).join('. ');
       out.push(newItem(f, `Power cut ${pc || 'near you'}${cust ? ` (${cust} affected)` : ''}`, f.link, toIso(start), summary, isHome ? 'warning' : 'watch', isHome, 'power'));
     }
-    const s = newItem(f, `${total} power cuts across the network now, ${homeCount} in ${hp.join('/') || 'your area'}, ${nearCount} nearby`, f.link, iso(now), 'A sudden jump in network-wide cuts can be the first sign of a big storm or wider grid trouble.', total >= 400 ? 'warning' : total >= 150 ? 'watch' : 'info', false, 'power-summary');
+    const s = newItem(f, `${total} power cuts across the network now, ${homeCount} in ${hp.join('/') || 'your area'}, ${nearCount} nearby`, f.link, iso(now), 'A sudden jump in network-wide cuts can be the first sign of a big storm or wider grid trouble.', total >= 400 && homeCount + nearCount ? 'warning' : total >= 150 ? 'watch' : 'info', false, 'power-summary');
     Object.assign(s, { value: total, homeCount, nearCount }); out.push(s);
     return out;
   };
@@ -754,7 +754,8 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
       const times = ratio >= 3 ? Math.round(ratio) : ratio.toFixed(1);
       const near = ps.homeCount ? `${ps.homeCount} in your postcode area` : ps.nearCount ? `${ps.nearCount} nearby` : 'none near you';
       const say = w => `Power cuts ${w} across ${area}: ${cur} now, ${times} times the usual ${baseline} (${near})`;
-      if (ratio >= 2 && jump >= 30) { ps.level = maxLevel(ps.level, 'warning'); ps.title = say('surging'); }
+      // a surge far from home is worth watching, not a warning: it only becomes one when some of the cuts are near you
+      if (ratio >= 2 && jump >= 30) { ps.level = maxLevel(ps.level, ps.homeCount || ps.nearCount ? 'warning' : 'watch'); ps.title = say('surging'); }
       else if (ratio >= 1.5 && jump >= 15) { ps.level = maxLevel(ps.level, 'watch'); ps.title = say('rising'); }
     }
     const byHour = {};
