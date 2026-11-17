@@ -102,9 +102,21 @@ function lockDown(win) {
   // links open in the normal browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
+  // if the page's process dies the window goes blank and stays blank until the app restarts: note why, then reload it
+  // (at most 3 times in 10 minutes, so a page that crashes on load doesn't loop forever)
+  const reloads = [];
+  win.webContents.on('render-process-gone', (e, d) => {
+    log(`WINDOW page stopped (${d.reason}, exit code ${d.exitCode})`);
+    if (win.isDestroyed() || d.reason === 'clean-exit') return;
+    const now = Date.now(); while (reloads.length && now - reloads[0] > 600000) reloads.shift();
+    if (reloads.length >= 3) { log('WINDOW not reloading again: it stopped 3 times in 10 minutes'); return; }
+    reloads.push(now); setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 1000);
+  });
+  win.on('unresponsive', () => log('WINDOW page not responding'));
+  win.on('responsive', () => log('WINDOW page responding again'));
 }
 function showDashboard() {
-  if (dashWin && !dashWin.isDestroyed()) { dashWin.show(); dashWin.focus(); return; }
+  if (dashWin && !dashWin.isDestroyed()) { if (dashWin.webContents.isCrashed()) dashWin.webContents.reload(); dashWin.show(); dashWin.focus(); return; }
   const b = settings && settings.window, wa = screen.getPrimaryDisplay().workArea;
   dashWin = new BrowserWindow({
     width: b ? b.width : Math.min(1600, wa.width), height: b ? b.height : Math.min(950, wa.height), x: b ? b.x : undefined, y: b ? b.y : undefined,
@@ -151,6 +163,8 @@ ipcMain.handle('ew:open-log', () => shell.openPath(logFile));
 
 // ---------------- start up ----------------
 app.on('second-instance', () => showDashboard());
+// the graphics process restarting can also blank the window for a moment; note it so a blank window can be explained later
+app.on('child-process-gone', (e, d) => log(`WINDOW ${d.type} process stopped (${d.reason}, exit code ${d.exitCode})`));
 app.whenReady().then(() => {
   settings = loadSettings();
   lastData = loadLast();
