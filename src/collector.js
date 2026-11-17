@@ -850,7 +850,9 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
   const READING = new Set(['wind', 'aqi', 'tide', 'river', 'freq', 'kp', 'fx', 'gdelt', 'ioda', 'power-summary', 'impact', 'quake-summary', 'travel-summary', 'eonet-summary', 'service-ok']);
   for (const i of items) {
     // a merged story counts as seen if any outlet's copy was seen, so a change of lead outlet doesn't notify again
-    const ids = [i.id, ...(i.sameStory || [])], prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
+    // a reading's title carries its number ("52 now"), so its id changes with every count: remember it by feed and level instead
+    const ids = READING.has(i.tag) ? [`reading:${i.feed}:${i.tag}:${i.level}`] : [i.id, ...(i.sameStory || [])];
+    const prev = ids.map(x => seen[x]).filter(Boolean).sort()[0];
     if (!prev) { i.isNew = true; if (RANK[i.level] >= RANK.warning && (!i.isNews || i.local || i.level === 'critical')) fresh.push(i); }
     else i.isNew = ageHours(prev) < 1;
     for (const x of ids) { live.add(x); if (!seen[x]) seen[x] = prev || iso(now); }
@@ -858,7 +860,8 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     if (READING.has(i.tag)) { i.reading = true; if (i.level === 'info') i.isNew = false; }
   }
   // forget items that have gone; one still showing keeps its first-seen time, or it would turn NEW again every two weeks
-  for (const k of Object.keys(seen)) if (!live.has(k) && ageHours(seen[k]) >= 24 * 14) delete seen[k];
+  // a reading that has dropped back is forgotten at once, so the next surge notifies again
+  for (const k of Object.keys(seen)) if (!live.has(k) && (k.startsWith('reading:') || ageHours(seen[k]) >= 24 * 14)) delete seen[k];
   writeJson(seenFile, seen);
 
   const okN = sources.filter(s => s.ok === true).length, allN = sources.filter(s => s.ok !== null).length;
