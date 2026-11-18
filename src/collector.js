@@ -39,8 +39,17 @@ function expandUrl(u) {
     .replace('{unixMinus1d}', String(Math.floor(n / 1000) - 86400)).replace('{date40}', day(new Date(n - 40 * 864e5))).replace('{today}', day(n))
     .replace('{date14}', day(new Date(n - 14 * 864e5))).replace('{date60}', day(new Date(n - 60 * 864e5)));
 }
+// Node's fetch only says "fetch failed"; the reason (connect timeout, DNS, reset...) is in e.cause
+const netReason = e => { const c = e && e.cause; if (!c) return ''; const code = c.code || (c.errors && c.errors[0] && c.errors[0].code) || c.name || ''; return [code, c.hostname || c.host || ''].filter(Boolean).join(' '); };
+async function fetchOnce(url, tries = 2) {
+  try { return await fetch(url, { headers: { 'User-Agent': UA, Accept: '*/*' }, signal: AbortSignal.timeout(30000), redirect: 'follow' }); }
+  catch (e) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError' || tries <= 1) { const r = netReason(e); if (r && !e.message.includes(r)) e.message += ' (' + r + ')'; e.network = true; throw e; }
+    await new Promise(r => setTimeout(r, 3000)); return fetchOnce(url, tries - 1);   // one quick retry: most of these are momentary
+  }
+}
 async function getText(url) {
-  const res = await fetch(expandUrl(url), { headers: { 'User-Agent': UA, Accept: '*/*' }, signal: AbortSignal.timeout(30000), redirect: 'follow' });
+  const res = await fetchOnce(expandUrl(url));
   if (!res.ok) { const e = new Error(`The server returned an error: (${res.status}) ${res.statusText}`); e.status = res.status; throw e; }
   return await res.text();
 }
@@ -649,18 +658,18 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
     try {
       if (f.everyMinutes && mtimeMin(cacheFile) < f.everyMinutes) got = readJson(cacheFile, null);
       if (!got) {
-        const wait = f.backoffMinutes || 15;
+        const wait = f.backoffMinutes || 15;   // only server errors (429, 5xx...) wait; a network blip is retried next refresh
         if (mtimeMin(failFile) < wait) throw new Error('waiting to retry: ' + fs.readFileSync(failFile, 'utf8'));
         got = await h(f);
         try { fs.unlinkSync(failFile); } catch {}
-        if (f.everyMinutes) writeJson(cacheFile, got);
+        writeJson(cacheFile, got);   // every feed keeps its last good data, so a failed fetch doesn't empty its panel
       }
       items.push(...got);
       sources.push({ id: f.id, name: f.name, panel: f.panel, link: f.link, ok: true, count: got.length, error: '' });
     } catch (e) {
       const msg = String(e.message || e).slice(0, 160);
-      if (!msg.startsWith('waiting to retry')) { log(`FAIL ${f.id}: ${msg}`); try { fs.writeFileSync(failFile, msg); } catch {} }
-      const stale = f.everyMinutes ? readJson(cacheFile, []) : [];
+      if (!msg.startsWith('waiting to retry')) { log(`FAIL ${f.id}: ${msg}`); if (!e.network) try { fs.writeFileSync(failFile, msg); } catch {} }
+      const stale = mtimeMin(cacheFile) <= 12 * 60 ? readJson(cacheFile, []) : [];   // last good data, if it's under 12 hours old
       items.push(...(stale || []));
       sources.push({ id: f.id, name: f.name, panel: f.panel, link: f.link, ok: false, count: (stale || []).length, error: stale && stale.length ? `showing last good data; ${msg}` : msg });
     }
