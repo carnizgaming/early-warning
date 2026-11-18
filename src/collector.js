@@ -320,13 +320,16 @@ async function collect(settings, feeds, dataDir, log = () => {}) {
       const p = q.properties, m = +p.mag, tsu = p.tsunami === 1, al = String(p.alert || 'none');
       let lvl = m >= 7.5 ? 'warning' : m >= 6.5 ? 'watch' : 'info'; if (tsu) lvl = maxLevel(lvl, 'watch');
       if (al === 'red') lvl = maxLevel(lvl, 'warning'); else if (al === 'orange') lvl = maxLevel(lvl, 'watch');
-      if (lvl === 'info' && m < 6 && al !== 'yellow') { small.push({ m, place: p.place, t: p.time }); continue; }
-      out.push(newItem(f, 'M' + m.toFixed(1) + ' earthquake, ' + p.place, p.url, iso(p.time), 'Alert: ' + al + '.' + (tsu ? ' Tsunami possible.' : ''), lvl, false, 'quake'));
+      // M5.5+ (or one USGS rates significant, i.e. widely felt) gets its own row so today's quakes are visible; it stays info
+      if (lvl === 'info' && m < 5.5 && al !== 'yellow' && !(+p.sig >= 600)) { small.push({ m, place: p.place, t: p.time }); continue; }
+      const felt = +p.felt > 0 ? ' Felt reports: ' + p.felt + '.' : '';
+      out.push(newItem(f, 'M' + m.toFixed(1) + ' earthquake, ' + p.place, p.url, iso(p.time), 'Alert: ' + al + '.' + (tsu ? ' Tsunami possible.' : '') + felt, lvl, false, 'quake'));
     }
     if (small.length) {
-      const big = small.reduce((a, b) => (b.m > a.m ? b : a));
+      const big = small.reduce((a, b) => (b.m > a.m ? b : a)), last = small.reduce((a, b) => (b.t > a.t ? b : a));
+      const hm = t => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
       out.push(newItem(f, small.length + ' smaller earthquake' + (small.length === 1 ? '' : 's') + ' worldwide in the last 24 hours (largest M' + big.m.toFixed(1) + ', ' + big.place + ')', f.link,
-        iso(Math.max(...small.map(s => s.t))), 'Magnitude 4.5 to 5.9 with no damage alert or tsunami flag. The full list is on the USGS map.', 'info', false, 'quake-summary'));
+        iso(last.t), 'Magnitude 4.5 to 5.4 with no damage alert or tsunami flag. Latest: M' + last.m.toFixed(1) + ', ' + last.place + ' at ' + hm(last.t) + '. The full list is on the USGS map.', 'info', false, 'quake-summary'));
     }
     return out;
   };
