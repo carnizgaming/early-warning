@@ -42,6 +42,10 @@ async function runCollect(reason = 'timer') {
     if (dashWin && !dashWin.isDestroyed()) dashWin.webContents.send('ew:data', data);
     updateTray();
     if (settings.notifications !== false) notify(fresh);
+    // most feeds failing usually means the network isn't up yet (just after start-up or waking): try again in a minute,
+    // not at the next 5-minute refresh, so the panels don't sit empty
+    const live = data.sources.filter(s => s.ok !== null), ok = live.filter(s => s.ok).length;
+    if (live.length && ok < live.length / 2 && reason !== 'retry') { log(`only ${ok}/${live.length} feeds answered; trying again in a minute`); setTimeout(() => runCollect('retry'), 60000); }
   } catch (e) { log('ERROR ' + (e.stack || e.message)); }
   finally { running = false; }
 }
